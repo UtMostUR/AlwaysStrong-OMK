@@ -1,0 +1,193 @@
+#!/system/bin/sh
+
+MODDIR=${0%/*}
+STATE_DIR=/data/adb/omk
+RESTART_FILE=$STATE_DIR/restart.keymint
+PEER_RESTART_FILE=$STATE_DIR/restart.injector
+RESTART_ALL_FILE=$STATE_DIR/restart.all
+
+OMK_RUN_DIR=/data/misc/keystore/omk
+KEYMINT_STORE=$OMK_RUN_DIR/data
+KEYMINT_LOG=$OMK_RUN_DIR/logs/keymint.log
+
+# --- Loader environment for keymint --------------------------------------
+# keymint's DT_NEEDED is only {liblog, libdl, libm, libc}, so libc++ reaches it
+# as a dependency of liblog.so rather than of keymint itself. bionic consults
+# LD_LIBRARY_PATH before the namespace search paths, and newer ROMs carry more
+# than one libc++_shared.so: listing /system/lib64 first picks a copy built
+# against a different libc++, after which the linker refuses to start the
+# process at all instead of falling back —
+#   CANNOT LINK EXECUTABLE ".../keymint": cannot locate symbol
+#   "_ZNSt3__113__hash_memoryEPKvm" referenced by "/system/lib64/liblog.so"
+# keymint then never comes up, the injector's 10s RPC window expires, and
+# keystore2 quietly keeps the system backend for the rest of the boot.
+# omk-injector leaves LD_LIBRARY_PATH untouched, which is why the injector runs
+# fine under the same conditions — keep the runtime APEX ahead of /system and
+# /vendor here to match, and keep the APEX root itself on the list (the copy
+# lives in lib64/, not in its bionic/ subdirectory).
+RUNTIME_APEX=/apex/com.android.runtime/lib64
+export LD_LIBRARY_PATH="$RUNTIME_APEX:$RUNTIME_APEX/bionic:/system/lib64:/vendor/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+find_module_keymint() {
+  if [ -f "/data/adb/omk/keymint" ]; then
+    echo /data/adb/omk/keymint
+    return 0
+  fi
+  if [ -f "$MODDIR/keymint" ]; then
+    echo "$MODDIR/keymint"
+    return 0
+  fi
+  if [ -f "$MODDIR/libs/arm64-v8a/keymint" ]; then
+    echo "$MODDIR/libs/arm64-v8a/keymint"
+    return 0
+  fi
+  if [ -f "$MODDIR/libs/x86_64/keymint" ]; then
+    echo "$MODDIR/libs/x86_64/keymint"
+    return 0
+  fi
+  return 1
+}
+
+expand_shared_restart() {
+  if [ -f "$RESTART_ALL_FILE" ]; then
+    : > "$RESTART_FILE"
+    : > "$PEER_RESTART_FILE"
+    rm -f "$RESTART_ALL_FILE"
+  fi
+}
+
+consume_restart_request() {
+  expand_shared_restart
+
+  if [ -f "$RESTART_FILE" ]; then
+    rm -f "$RESTART_FILE"
+    return 0
+  fi
+
+  return 1
+}
+
+# --- Startup-crash recovery ----------------------------------------------
+# keymint seals every key it mints — including the boot-level key it looks up
+# during startup — under the [crypto] seeds in config.toml. Those seeds live in
+# the store's own database, so a store written under a different seed makes
+# startup die instead of degrading:
+#   failed to decrypt keyblob: ... VerificationFailed ...
+#   failed to initialize boot-level key cache
+#   fatal startup error: ...
+# The seeds change whenever the engine is swapped or config.toml is regenerated
+# (an OMK downgrade migrates the config and rewrites them), and keymint never
+# rebuilds the store itself. Without this the loop below would restart a dying
+# keymint forever, and for the whole boot keystore2 quietly serves the system
+# backend while config.toml looks perfectly correct.
+#
+# The blobs are cryptographically dead by the time we get here, so dropping the
+# store is the only fix and it costs nothing recoverable. config.toml is left
+# alone: its seeds and [trust] section stay, and keymint writes the rebuilt store
+# under those same seeds.
+#
+# Gated on two independent signals — repeated fast non-zero exits AND a key
+# material failure in keymint.log — because a missing or broken keybox also ends
+# in "fatal startup error", and wiping the store would not fix that and would
+# throw away keys that were still perfectly usable.
+RAPID_EXIT_SECONDS=60
+rapid_failures=0
+
+store_looks_undecryptable() {
+  [ -s "$KEYMINT_LOG" ] || return 1
+  tail -n 400 "$KEYMINT_LOG" 2>/dev/null | grep -qE \
+    'failed to decrypt keyblob|Failed to decrypt the key blob|unwrap_key_with_key failed|failed to initialize boot-level key cache'
+}
+
+reset_keymint_store() {
+  # Only ever delete the one hardcoded store root, matched literally so a bad
+  # variable can never widen the rm.
+  case "$KEYMINT_STORE" in
+    /data/misc/keystore/omk/data) ;;
+    *) return 1 ;;
+  esac
+  [ -d "$KEYMINT_STORE" ] || return 1
+
+  # Rebuild the directory with the mode and owner keymint gave it, so the restart
+  # sees the same container it would have created for itself.
+  _mode=$(stat -c %a "$KEYMINT_STORE" 2>/dev/null)
+  _uid=$(stat -c %u "$KEYMINT_STORE" 2>/dev/null)
+  _gid=$(stat -c %g "$KEYMINT_STORE" 2>/dev/null)
+
+  rm -rf "$KEYMINT_STORE" 2>/dev/null
+  mkdir -p "$KEYMINT_STORE" 2>/dev/null
+  [ -n "$_mode" ] && chmod "$_mode" "$KEYMINT_STORE" 2>/dev/null
+  case "$_uid$_gid" in
+    ''|*[!0-9]*) ;;
+    *) chown "$_uid:$_gid" "$KEYMINT_STORE" 2>/dev/null ;;
+  esac
+
+  # Keep the crash trail for collect_logs.sh, but move it off the live path — the
+  # next run must not re-read these lines and reset the store a second time.
+  [ -f "$KEYMINT_LOG" ] && mv -f "$KEYMINT_LOG" "$KEYMINT_LOG.store-reset" 2>/dev/null
+
+  echo "[keymint-daemon] undecryptable keymint store dropped; restarting with a clean one"
+}
+
+cd "$MODDIR" || exit 1
+mkdir -p "$STATE_DIR"
+
+while true; do
+  TARGET=$(find_module_keymint)
+  if [ -z "$TARGET" ]; then
+    echo "[keymint-daemon] keymint binary not found"
+    sleep 5
+    continue
+  fi
+
+  chmod 0755 "$TARGET"
+
+  started_at=$(date +%s 2>/dev/null)
+  "$TARGET" "$@" &
+  child_pid=$!
+  requested=0
+
+  while kill -0 "$child_pid" 2>/dev/null; do
+    if consume_restart_request; then
+      requested=1
+      echo "[keymint-daemon] restart requested"
+      kill -TERM "$child_pid" 2>/dev/null
+      sleep 2
+      if kill -0 "$child_pid" 2>/dev/null; then
+        kill -KILL "$child_pid" 2>/dev/null
+      fi
+      break
+    fi
+    sleep 2
+  done
+
+  wait "$child_pid"
+  rc=$?
+  echo "[keymint-daemon] keymint exited with code $rc"
+
+  # Any unrequested early exit counts, whatever the code: a fatal startup error
+  # is expected to exit non-zero, but a keymint that exits 0 three seconds after
+  # starting leaves the engine just as dead, and the log signature below is what
+  # actually decides whether the store is at fault.
+  if [ "$requested" = 0 ]; then
+    ended_at=$(date +%s 2>/dev/null)
+    case "$started_at$ended_at" in
+      ''|*[!0-9]*) ;;
+      *)
+        if [ $((ended_at - started_at)) -lt "$RAPID_EXIT_SECONDS" ]; then
+          rapid_failures=$((rapid_failures + 1))
+        else
+          rapid_failures=0
+        fi
+        ;;
+    esac
+    if [ "$rapid_failures" -ge 2 ] && store_looks_undecryptable; then
+      reset_keymint_store
+      rapid_failures=0
+    fi
+  else
+    rapid_failures=0
+  fi
+
+  sleep 2
+done

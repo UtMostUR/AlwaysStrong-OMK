@@ -1,0 +1,1486 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>AlwaysStrong</title>
+<style>
+:root{
+  --bg:#fafafa; --fg:#0a0a0a; --muted:#8a8a8e;
+  --line:rgba(0,0,0,.06); --card:#ffffff;
+  --slider:#e3e3e8; --accent:#10b981; --accent-2:#059669;
+  --tg:#229ED9; --heart:#e0245e;
+  --shadow:0 1px 2px rgba(0,0,0,.04),0 4px 12px rgba(0,0,0,.04);
+  --shadow-pop:0 8px 28px rgba(0,0,0,.12),0 2px 8px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#000; --fg:#f5f5f7; --muted:#7f7f86;
+    --line:rgba(255,255,255,.07); --card:#161618;
+    --slider:#2c2c2e; --accent:#34d399; --accent-2:#10b981;
+    --tg:#2AABEE;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 12px rgba(0,0,0,.18);
+    --shadow-pop:0 12px 32px rgba(0,0,0,.45),0 2px 8px rgba(0,0,0,.3);
+  }
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+/* class selectors (.fm{display:flex}, .icon-btn{display:flex}) would otherwise
+   beat the UA [hidden] rule and force hidden elements visible — pin it. */
+[hidden]{display:none!important}
+html,body{margin:0;background:var(--bg);color:var(--fg)}
+body{
+  font:15px/1.45 -apple-system,system-ui,"SF Pro Text","Segoe UI",Roboto,sans-serif;
+  padding:28px 18px 40px;
+  padding-top:max(28px,env(safe-area-inset-top));
+  padding-bottom:max(40px,env(safe-area-inset-bottom));
+  padding-left:max(18px,env(safe-area-inset-left));
+  padding-right:max(18px,env(safe-area-inset-right));
+  max-width:520px;margin:0 auto;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+
+/* ---------------- header ---------------- */
+.hd{margin:0 0 28px;display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap}
+h1{
+  margin:0;font-size:30px;font-weight:700;letter-spacing:-.028em;line-height:1;
+  background:linear-gradient(135deg,var(--fg) 30%,var(--accent) 130%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.ver{
+  color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums;
+  font-weight:500;padding:3px 8px;border-radius:6px;
+  background:var(--card);box-shadow:var(--shadow);
+}
+/* Which of the 9 builds this is (PI line · keystore engine), derived at runtime
+   from engine.sh + attest.sh — kept out of the module name, shown here instead. */
+.variant{
+  flex-basis:100%;margin-top:3px;
+  color:var(--muted);font-size:11.5px;font-weight:500;letter-spacing:.012em;
+  opacity:.85;
+}
+.variant:empty{display:none}
+
+/* ---------------- status pill ---------------- */
+.status{
+  display:flex;align-items:center;justify-content:space-between;
+  margin:0 0 22px;padding:14px 16px;
+  background:var(--card);border-radius:14px;box-shadow:var(--shadow);
+  animation:rise .4s cubic-bezier(.2,.7,.2,1) both;
+}
+.status-l{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px}
+.status-dot{
+  width:8px;height:8px;border-radius:50%;background:var(--accent);
+  box-shadow:0 0 0 0 var(--accent);
+  animation:pulse 2.2s ease-out infinite;
+}
+.status-val{font-size:17px;letter-spacing:.06em;line-height:1}
+.status-r{display:flex;align-items:center;gap:10px}
+.kb-name{font-size:12px;color:var(--muted);font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap}
+@keyframes pulse{
+  0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 55%,transparent)}
+  70%{box-shadow:0 0 0 10px transparent}
+  100%{box-shadow:0 0 0 0 transparent}
+}
+
+/* ---------------- card + rows ---------------- */
+.lbl{
+  font-size:11px;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--muted);margin:0 0 8px 14px;font-weight:600;
+}
+.card{
+  background:var(--card);border-radius:16px;
+  box-shadow:var(--shadow);overflow:hidden;margin-bottom:22px;
+}
+.row{
+  display:flex;align-items:center;padding:13px 16px;min-height:58px;gap:13px;
+  transition:background .15s;
+}
+.row+.row{border-top:1px solid var(--line)}
+.row-ic{
+  width:30px;height:30px;flex-shrink:0;border-radius:8px;
+  display:flex;align-items:center;justify-content:center;
+  color:var(--muted);background:color-mix(in srgb,var(--muted) 8%,transparent);
+}
+.row-ic svg{width:17px;height:17px;display:block}
+.row-lbl{flex:1;min-width:0}
+.row-t{font-size:15px;font-weight:500;line-height:1.25}
+.row-s{font-size:12px;color:var(--muted);margin-top:2px;line-height:1.3}
+
+/* toggle switch — iOS feel with bounce */
+.sw{position:relative;width:46px;height:28px;flex-shrink:0}
+.sw input{opacity:0;width:0;height:0;position:absolute}
+.sw .sl{
+  position:absolute;inset:0;background:var(--slider);
+  border-radius:28px;cursor:pointer;
+  transition:background .22s cubic-bezier(.2,.7,.2,1);
+}
+.sw .sl::before{
+  content:"";position:absolute;left:2px;top:2px;width:24px;height:24px;
+  background:#fff;border-radius:50%;
+  box-shadow:0 1px 2px rgba(0,0,0,.18),0 2px 6px rgba(0,0,0,.12);
+  transition:transform .26s cubic-bezier(.34,1.56,.64,1);
+}
+.sw input:checked + .sl{background:var(--accent)}
+.sw input:checked + .sl::before{transform:translateX(18px)}
+[dir="rtl"] .sw input:checked + .sl::before{transform:translateX(-18px)}
+
+/* number input — invisible-until-edited feel */
+.int-wrap{display:flex;align-items:baseline;gap:5px}
+.int{
+  appearance:none;-webkit-appearance:none;-moz-appearance:textfield;
+  background:color-mix(in srgb,var(--muted) 8%,transparent);
+  border:0;color:var(--fg);
+  font:600 15px/1 inherit;font-family:inherit;font-variant-numeric:tabular-nums;
+  width:54px;padding:7px 8px;border-radius:8px;text-align:center;
+  transition:background .15s;
+}
+.int:focus{outline:0;background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.int::-webkit-inner-spin-button,
+.int::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.int-unit{color:var(--muted);font-size:13px}
+
+/* ---------------- custom keybox ---------------- */
+.ck-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.icon-btn{
+  width:34px;height:34px;flex-shrink:0;border:0;border-radius:9px;
+  background:color-mix(in srgb,var(--muted) 10%,transparent);
+  color:var(--muted);cursor:pointer;padding:0;
+  display:flex;align-items:center;justify-content:center;
+  -webkit-appearance:none;
+  transition:background .15s,color .15s,transform .12s;
+}
+.icon-btn:hover{color:var(--fg)}
+.icon-btn:active{transform:scale(.92)}
+.icon-btn svg{width:17px;height:17px;display:block}
+.icon-btn.danger:hover{color:#ef4444;background:color-mix(in srgb,#ef4444 14%,transparent)}
+.row{transition:background .15s,opacity .25s}
+.row.disabled{opacity:.42;pointer-events:none}
+#ckName{cursor:pointer}
+#ckName.ck-sel{font-size:13px;font-weight:500}
+/* smooth accordion for the file row instead of an abrupt pop */
+#ckFileRow{
+  max-height:0;min-height:0;opacity:0;overflow:hidden;
+  padding-top:0;padding-bottom:0;border-top:0;
+  transition:max-height .3s cubic-bezier(.2,.7,.2,1),opacity .24s ease,
+             padding .3s cubic-bezier(.2,.7,.2,1);
+}
+#ckFileRow.ck-open{
+  max-height:88px;min-height:58px;opacity:1;
+  padding-top:13px;padding-bottom:13px;border-top:1px solid var(--line);
+}
+
+/* ---------------- file manager (Tricky-Addon style dialog) ---------------- */
+.fm{
+  position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.55);
+  display:flex;align-items:center;justify-content:center;padding:16px;
+  padding-top:max(16px,env(safe-area-inset-top));
+  padding-bottom:max(16px,env(safe-area-inset-bottom));
+  animation:fmfade .2s ease both;
+}
+@keyframes fmfade{from{opacity:0}to{opacity:1}}
+.fm-box{
+  background:var(--card);width:100%;max-width:460px;height:80vh;max-height:660px;
+  border-radius:26px;display:flex;flex-direction:column;overflow:hidden;
+  box-shadow:var(--shadow-pop);
+  animation:fmpop .3s cubic-bezier(.34,1.28,.64,1) both;
+}
+@keyframes fmpop{from{opacity:0;transform:scale(.93)}to{opacity:1;transform:none}}
+.fm-bar{display:flex;align-items:center;gap:6px;padding:14px 12px 10px}
+.fm-crumb{
+  flex:1;min-width:0;overflow-x:auto;white-space:nowrap;font-size:13.5px;
+  scrollbar-width:none;-ms-overflow-style:none;padding:2px 2px;
+}
+.fm-crumb::-webkit-scrollbar{display:none}
+.fm-seg{cursor:pointer;color:var(--fg);font-weight:500}
+.fm-seg:last-child{color:var(--muted)}
+.fm-sep{color:var(--muted);padding:0 5px}
+#fmSort{width:auto;padding:0 12px;height:34px;font-size:12px;font-weight:600;flex-shrink:0}
+.fm-list{
+  flex:1;overflow-y:auto;padding:6px 8px;-webkit-overflow-scrolling:touch;
+  transition:transform .16s ease,opacity .16s ease;
+  will-change:transform,opacity;
+}
+.fm-list.switching{transform:scale(.97);opacity:0}
+.fm-item{
+  display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:13px;
+  cursor:pointer;transition:background .12s;
+}
+.fm-item:active{background:color-mix(in srgb,var(--muted) 15%,transparent)}
+.fm-ic{width:26px;height:26px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:var(--muted)}
+.fm-ic svg{width:21px;height:21px;display:block}
+.fm-ic.dir{color:var(--accent)}
+.fm-info{flex:1;min-width:0}
+.fm-nm{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fm-sub{font-size:11px;color:var(--muted);margin-top:1px;font-variant-numeric:tabular-nums}
+.fm-empty{text-align:center;color:var(--muted);font-size:13px;padding:36px 16px}
+.fm-foot{display:flex;justify-content:flex-end;padding:8px 12px 12px;border-top:1px solid var(--line)}
+.fm-cancel{
+  background:transparent;border:0;color:var(--accent);cursor:pointer;
+  font:600 14px/1 inherit;font-family:inherit;padding:9px 16px;border-radius:11px;
+  transition:background .14s;
+}
+.fm-cancel:active{background:color-mix(in srgb,var(--accent) 14%,transparent)}
+
+/* ---------------- language picker ---------------- */
+.lang-btn{
+  position:fixed;top:env(safe-area-inset-top,0);right:0;
+  margin:18px;width:38px;height:38px;border-radius:50%;
+  background:var(--card);border:0;color:var(--fg);
+  font-size:17px;cursor:pointer;line-height:1;padding:0;
+  box-shadow:var(--shadow);
+  -webkit-appearance:none;
+  transition:transform .15s,box-shadow .15s;
+  z-index:5;
+}
+.lang-btn:hover{box-shadow:var(--shadow-pop)}
+.lang-btn:active{transform:scale(.92)}
+.lang-pop{
+  position:fixed;top:64px;right:18px;
+  background:var(--card);border-radius:14px;
+  padding:6px 0;min-width:172px;max-height:70vh;overflow:auto;
+  box-shadow:var(--shadow-pop);
+  z-index:10;
+  animation:popin .18s cubic-bezier(.34,1.56,.64,1) both;
+  transform-origin:top right;
+}
+@keyframes popin{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:none}}
+.lang-pop button{
+  display:flex;align-items:center;justify-content:space-between;
+  width:100%;text-align:left;background:transparent;border:0;
+  color:var(--fg);padding:10px 16px;
+  font:14px/1.2 inherit;font-family:inherit;cursor:pointer;
+}
+.lang-pop button:hover{background:color-mix(in srgb,var(--muted) 10%,transparent)}
+.lang-pop button.active{color:var(--accent);font-weight:600}
+.lang-pop button.active::after{content:"✓";font-size:13px;opacity:.9}
+
+/* ---------------- tab bar ---------------- */
+.tabs{
+  display:flex;gap:4px;background:var(--card);border-radius:12px;
+  padding:4px;margin:0 0 22px;box-shadow:var(--shadow);
+}
+.tab{
+  flex:1;border:0;background:transparent;color:var(--muted);
+  font:600 13px/1 inherit;font-family:inherit;padding:11px 8px;border-radius:9px;
+  cursor:pointer;transition:background .16s,color .16s;
+}
+.tab.active{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent)}
+.tab:active{transform:scale(.98)}
+/* amber accent for a row whose toggle degrades a ROM feature when enabled */
+.warn-row .row-ic{color:#f59e0b;background:color-mix(in srgb,#f59e0b 13%,transparent)}
+.adv-note{color:var(--muted);font-size:12px;line-height:1.5;margin:2px 6px 0 14px}
+.spoofvar-t{font:600 14.5px/1.25 ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;letter-spacing:-.01em}
+#spoofVars .row{min-height:52px}
+#spoofVars .fm-empty{padding:22px 16px}
+
+/* ---------------- footer ---------------- */
+.foot{
+  margin-top:30px;display:flex;justify-content:center;
+  align-items:center;gap:8px;flex-wrap:wrap;
+  animation:rise .5s cubic-bezier(.2,.7,.2,1) both;animation-delay:.2s;
+}
+.foot a,.foot button.foot-btn{
+  display:inline-flex;align-items:center;gap:7px;
+  color:var(--muted);text-decoration:none;font-size:13px;font-weight:500;
+  padding:8px 12px;border-radius:10px;
+  transition:color .14s,background .14s,transform .12s;
+}
+.foot button.foot-btn{background:none;border:0;cursor:pointer;font-family:inherit}
+.foot a:hover,.foot button.foot-btn:hover{color:var(--fg);background:color-mix(in srgb,var(--muted) 8%,transparent)}
+.foot a:active,.foot button.foot-btn:active{transform:scale(.96)}
+.foot button.foot-btn[disabled]{opacity:.55;pointer-events:none}
+.foot a svg,.foot button.foot-btn svg{width:15px;height:15px;flex-shrink:0;display:block}
+.foot a.tg svg{color:var(--tg)}
+.foot a.dn svg{color:var(--heart)}
+
+/* ---------------- toast ---------------- */
+.toast{
+  position:fixed;left:50%;bottom:24px;
+  transform:translateX(-50%) translateY(20px);
+  max-width:88%;background:var(--card);color:var(--fg);
+  border:1px solid var(--line);box-shadow:var(--shadow-pop);
+  border-radius:12px;padding:12px 16px;font-size:13px;line-height:1.4;
+  opacity:0;pointer-events:none;z-index:100;
+  word-break:break-all;text-align:center;
+  transition:opacity .2s,transform .2s;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ---------------- mount animations ---------------- */
+@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.hd,.lbl,.card{animation:rise .4s cubic-bezier(.2,.7,.2,1) both}
+.lbl{animation-delay:.06s}
+.card{animation-delay:.10s}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms!important;
+    transition-duration:.001ms!important;
+  }
+}
+
+/* ---------------- per-app keybox ---------------- */
+.apps-search{flex:1;min-width:0;background:color-mix(in srgb,var(--muted) 12%,transparent);border:0;border-radius:10px;color:var(--fg);font-size:14px;padding:9px 12px;outline:0;transition:background .15s,box-shadow .15s}
+.apps-search::placeholder{color:var(--muted)}
+.apps-search:focus-visible{background:color-mix(in srgb,var(--accent) 12%,transparent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 45%,transparent)}
+.fm-item{transition:background .16s}
+.fm-item.pick{background:color-mix(in srgb,var(--accent) 15%,transparent)}
+/* "Target apps" navigation row in the main card */
+.row.nav{cursor:pointer}
+.row.nav:active{background:color-mix(in srgb,var(--muted) 8%,transparent)}
+/* app rows: icon + label + package + tick */
+.applist .fm-item{gap:12px}
+.app-icon{width:38px;height:38px;flex-shrink:0;border-radius:9px;object-fit:cover;background:color-mix(in srgb,var(--muted) 14%,transparent)}
+.app-icon.lg{width:46px;height:46px;border-radius:12px}
+.app-nm{font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app-pkg{font-size:11px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.app-badge{flex-shrink:0;font-size:10px;font-weight:600;padding:3px 7px;border-radius:999px;background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);white-space:nowrap;max-width:34%;overflow:hidden;text-overflow:ellipsis}
+/* tick, tinted by mode: auto=accent, generate=amber, hack=blue */
+.app-chk{flex-shrink:0;width:22px;height:22px;border-radius:7px;border:2px solid var(--slider);display:flex;align-items:center;justify-content:center;color:transparent;transition:background .16s,border-color .16s,color .16s}
+.app-chk.on{background:#6750A4;border-color:#6750A4;color:#fff}
+.app-chk.on.gen{background:#36DB2B;border-color:#36DB2B;color:#fff}
+.app-chk.on.hack{background:#FF8400;border-color:#FF8400;color:#fff}
+@media (prefers-color-scheme:dark){.app-chk.on:not(.gen):not(.hack){background:#D0BCFF;border-color:#D0BCFF;color:#381E72}}
+:root[data-theme="dark"] .app-chk.on:not(.gen):not(.hack){background:#D0BCFF;border-color:#D0BCFF;color:#381E72}
+:root[data-theme="light"] .app-chk.on:not(.gen):not(.hack){background:#6750A4;border-color:#6750A4;color:#fff}
+.app-chk svg{width:14px;height:14px;display:block}
+/* long-press config dialog — compact iOS action-sheet feel */
+#cfg .fm-box{max-width:360px}
+.cfg-head{display:flex;align-items:center;gap:13px;padding:18px 18px 10px}
+.cfg-htext{min-width:0}
+.cfg-name{font-size:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cfg-pkg{font-size:11.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kbp-box{height:auto;max-height:82vh;display:flex;flex-direction:column}
+.kbp-scroll{overflow-y:auto;padding:0 2px 2px}
+.kbp-sec{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);padding:12px 18px 6px}
+/* iOS-style grouped rounded list — mode options + the keybox row */
+.kbp-group{margin:0 12px 6px;background:color-mix(in srgb,var(--muted) 8%,transparent);border-radius:13px;overflow:hidden}
+.kbp-opt,.cfg-kbrow{display:flex;align-items:center;gap:10px;width:100%;padding:12px 14px;border:0;background:transparent;color:var(--fg);text-align:start;cursor:pointer;transition:background .14s}
+.kbp-opt+.kbp-opt{border-top:1px solid var(--line)}
+.kbp-opt:active,.cfg-kbrow:active{background:color-mix(in srgb,var(--muted) 13%,transparent)}
+.kbp-opt .t{font-size:14px;font-weight:500;line-height:1.2}
+.kbp-opt .s{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.2}
+.kbp-opt .chk{margin-inline-start:auto;width:20px;height:20px;color:var(--accent);flex-shrink:0;opacity:0;transform:scale(.7);transition:opacity .15s,transform .15s}
+.kbp-opt.on .chk{opacity:1;transform:none}
+.kbp-opt.on .t{color:var(--accent);font-weight:600}
+.cfg-kbrow .fm-nm{font-size:14px}
+.cfg-kbrow .chev{width:18px;height:18px;color:var(--muted);flex-shrink:0;margin-inline-start:auto}
+/* footer: ghost Cancel + primary Apply */
+.fm-foot{gap:6px}
+#cfgApply,#kbpOk,#appsOk,#pkgOk{background:var(--accent);color:#fff;border-radius:10px;padding:9px 22px;font-weight:600;transition:transform .12s,filter .15s}
+#cfgApply:hover,#kbpOk:hover,#appsOk:hover,#pkgOk:hover{filter:brightness(1.06)}
+#cfgApply:active,#kbpOk:active,#appsOk:active,#pkgOk:active{transform:scale(.96)}
+/* kebab menu inside the Target apps dialog */
+.fm-box{position:relative}
+.menu-pop{
+  position:absolute;top:52px;right:12px;z-index:20;
+  background:var(--card);border-radius:12px;padding:6px 0;min-width:214px;
+  box-shadow:var(--shadow-pop);
+  animation:popin .16s cubic-bezier(.34,1.56,.64,1) both;transform-origin:top right;
+}
+.menu-pop button{
+  display:block;width:100%;text-align:start;background:transparent;border:0;
+  color:var(--fg);padding:12px 16px;font:14px/1.2 inherit;font-family:inherit;cursor:pointer;
+}
+.menu-pop button:active{background:color-mix(in srgb,var(--muted) 12%,transparent)}
+/* file manager sits ABOVE the app/config/keybox overlays (e.g. import from the
+   keybox picker) so it isn't hidden behind them */
+#fm{z-index:60}
+.fm-cancel.ghosttext{color:var(--muted)}
+.kbp-opt:focus-visible,.fm-cancel:focus-visible,.cfg-kbrow:focus-visible{outline:2px solid color-mix(in srgb,var(--accent) 55%,transparent);outline-offset:-2px}
+</style>
+</head>
+<body>
+
+<button id="langBtn" class="lang-btn" aria-label="Language">🌐</button>
+<div id="langPop" class="lang-pop" hidden></div>
+
+<div class="hd">
+  <h1>AlwaysStrong</h1>
+  <div class="ver" id="ver">—</div>
+  <div class="variant" id="variant"></div>
+</div>
+
+<div class="status" id="statusRow" hidden>
+  <span class="status-l">
+    <span class="status-dot" id="statusDot"></span>
+    <span data-i="status">Keybox status</span>
+  </span>
+  <span class="status-r">
+    <span class="kb-name" id="kbName"></span>
+    <span class="status-val" id="statusVal">—</span>
+  </span>
+</div>
+
+<div class="tabs" role="tablist">
+  <button class="tab active" id="tabBtnMain" type="button" role="tab" data-i="tab_main">Configuration</button>
+  <button class="tab" id="tabBtnAdv" type="button" role="tab" data-i="tab_adv">Advanced</button>
+</div>
+
+<div id="tabMain">
+<div class="lbl" data-i="auto">Configuration</div>
+<div class="card">
+
+  <div class="row" id="fpRow" hidden>
+    <div class="row-ic">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12c0-3.866 3.134-7 7-7s7 3.134 7 7v1"/><path d="M12 9v4c0 1.105.895 2 2 2"/><path d="M9 18c.6-1 1-2.5 1-5"/><path d="M16 19c-.667-.667-1-2-1-4"/></svg>
+    </div>
+    <div class="row-lbl">
+      <div class="row-t" data-i="fp_t">Fingerprint</div>
+      <div class="row-s" data-i="fp_s">Automatic Pixel Canary refresh</div>
+    </div>
+    <label class="sw"><input type="checkbox" id="fp"><span class="sl"></span></label>
+  </div>
+
+  <div class="row">
+    <div class="row-ic">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="14" r="3.5"/><path d="m11 12 9-9"/><path d="m15 7 3 3"/><path d="m18 4 3 3"/></svg>
+    </div>
+    <div class="row-lbl">
+      <div class="row-t" data-i="kb_t">Keybox</div>
+      <div class="row-s" data-i="kb_s">Auto check, writes only if newer</div>
+    </div>
+    <label class="sw"><input type="checkbox" id="kb"><span class="sl"></span></label>
+  </div>
+
+  <div class="row">
+    <div class="row-ic">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.5"/><path d="M16.5 7.5a6 6 0 0 1 0 9"/><path d="M7.5 16.5a6 6 0 0 1 0-9"/><path d="M19.5 4.5a10 10 0 0 1 0 15"/><path d="M4.5 19.5a10 10 0 0 1 0-15"/></svg>
+    </div>
+    <div class="row-lbl">
+      <div class="row-t" data-i="ind_t">Status indicator</div>
+      <div class="row-s" data-i="ind_s">Show status prefix in description</div>
+    </div>
+    <label class="sw"><input type="checkbox" id="ind"><span class="sl"></span></label>
+  </div>
+
+  <div class="row">
+    <div class="row-ic">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.5 8.5 8 9 4.5-.5 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>
+    </div>
+    <div class="row-lbl">
+      <div class="row-t" data-i="rs_t">Block ROM spoof</div>
+      <div class="row-s" data-i="rs_s">Disable PixelProps / pihooks engines</div>
+    </div>
+    <label class="sw"><input type="checkbox" id="rs"><span class="sl"></span></label>
+  </div>
+
+  <div class="row nav" id="pakRow">
+    <div class="row-ic">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M17.5 14v7M14 17.5h7"/></svg>
+    </div>
+    <div class="row-lbl">
+      <div class="row-t" data-i="pak_t">Target apps</div>
+      <div class="row-s" id="pakSub" data-i="pak_s">Choose apps, mode &amp; keybox</div>
+    </div>
+    <button class="icon-btn" id="pakOpen" type="button" aria-label="Open" tabindex="-1">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+    </button>
+  </div>
+
+  <div class="row">
+    <div class="row-ic">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+    </div>
+    <div class="row-lbl">
+      <div class="row-t" data-i="int_t">Check every</div>
+    </div>
+    <div class="int-wrap">
+      <input id="int" class="int" type="number" min="1" step="1" inputmode="numeric" value="60">
+      <span class="int-unit">min</span>
+    </div>
+  </div>
+
+</div>
+
+<div class="lbl" data-i="ckbx">Custom keybox</div>
+<div class="card">
+  <div class="row">
+    <div class="row-ic">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="14" r="3.5"/><path d="m11 12 9-9"/><path d="m15 7 3 3"/><path d="m18 4 3 3"/></svg>
+    </div>
+    <div class="row-lbl">
+      <div class="row-t" data-i="ck_t">Custom keybox</div>
+      <div class="row-s" data-i="ck_s">Use your own keybox — auto-fetch off</div>
+    </div>
+    <label class="sw"><input type="checkbox" id="ck"><span class="sl"></span></label>
+  </div>
+  <div class="row" id="ckFileRow">
+    <div class="row-ic">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/></svg>
+    </div>
+    <div class="row-lbl">
+      <div class="row-t" id="ckName" data-i="ck_pick">Select keybox file</div>
+      <div class="row-s" id="ckSize" data-i="ck_none">No file selected</div>
+    </div>
+    <div class="ck-actions">
+      <button class="icon-btn" id="ckPick" type="button" aria-label="Select">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-8l-2-2H4a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1z"/></svg>
+      </button>
+      <button class="icon-btn danger" id="ckDel" type="button" aria-label="Delete" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/><path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+</div><!-- /tabMain -->
+
+<div id="tabAdv" hidden>
+<div class="lbl" data-i="adv">Advanced</div>
+<div class="card">
+  <div class="row nav" id="impPifRow">
+    <div class="row-ic">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m8 11 4 4 4-4"/><path d="M5 19h14"/></svg>
+    </div>
+    <div class="row-lbl">
+      <div class="row-t" data-i="imp_t">Import fingerprint</div>
+      <div class="row-s" data-i="imp_s">Load a pif.json or pif.prop file</div>
+    </div>
+    <button class="icon-btn" id="impPifBtn" type="button" aria-label="Import" tabindex="-1">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+    </button>
+  </div>
+  <div class="row">
+    <div class="row-ic">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/><path d="m9 16 2 2 4-4"/></svg>
+    </div>
+    <div class="row-lbl">
+      <div class="row-t" data-i="spp_t">Spoof security patch</div>
+      <div class="row-s" data-i="spp_s">Keep the system patch date equal to the attested one</div>
+    </div>
+    <label class="sw"><input type="checkbox" id="spp"><span class="sl"></span></label>
+  </div>
+</div>
+
+<div id="spoofSection">
+<div class="lbl" data-i="spoofvars">Spoof variables</div>
+<div class="card" id="spoofVars"></div>
+<p class="adv-note" data-i="adv_note">The PlayIntegrity spoof flags. The defaults are what pass STRONG — only flip one if a specific app needs it (e.g. spoofProps off for some wallet apps). Changes apply right away.</p>
+</div>
+</div><!-- /tabAdv -->
+
+<div class="foot">
+  <a class="tg" href="https://t.me/keyboxstrong" data-ext>
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9.78 17.6 9.61 14l7.5-6.78c.34-.31-.07-.46-.52-.19L7.74 12.85 3.74 11.6c-.86-.27-.87-.86.2-1.27L19.16 4.6c.71-.32 1.4.17 1.13 1.27L17.7 17.61c-.19.89-.72 1.1-1.46.69l-3.99-2.94-1.92 1.86c-.22.22-.41.41-.85.41-.43 0-.4-.2-.55-.6-.16-.42-.79-2.6-1.15-3.43z"/></svg>
+    <span>keyboxstrong</span>
+  </a>
+  <a class="tg" href="https://t.me/evokeroot" data-ext>
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9.78 17.6 9.61 14l7.5-6.78c.34-.31-.07-.46-.52-.19L7.74 12.85 3.74 11.6c-.86-.27-.87-.86.2-1.27L19.16 4.6c.71-.32 1.4.17 1.13 1.27L17.7 17.61c-.19.89-.72 1.1-1.46.69l-3.99-2.94-1.92 1.86c-.22.22-.41.41-.85.41-.43 0-.4-.2-.55-.6-.16-.42-.79-2.6-1.15-3.43z"/></svg>
+    <span>evokeroot</span>
+  </a>
+  <a class="dn" href="https://coindrop.to/evokerrr" data-ext>
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21s-7-4.35-7-10.5C5 7.5 7.5 5 10.5 5 12 5 12 6 12 6s0-1 1.5-1C16.5 5 19 7.5 19 10.5 19 16.65 12 21 12 21z"/></svg>
+    <span data-i="donate">Donate</span>
+  </a>
+  <button class="foot-btn" id="logBtn" type="button">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="M9 13h6M9 17h4"/></svg>
+    <span id="logBtnLbl" data-i="logs">Collect logs</span>
+  </button>
+</div>
+
+<div class="fm" id="fm" hidden>
+  <div class="fm-box">
+    <div class="fm-bar">
+      <button class="icon-btn" id="fmUp" type="button" aria-label="Back">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+      </button>
+      <div class="fm-crumb" id="fmPath"></div>
+      <button class="icon-btn" id="fmSort" type="button" aria-label="Sort"><span id="fmSortLbl">A–Z</span></button>
+    </div>
+    <div class="fm-list" id="fmList"></div>
+    <div class="fm-foot">
+      <button class="fm-cancel" id="fmClose" type="button" data-i="fm_cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="fm" id="apps" hidden role="dialog" aria-modal="true" aria-label="Per-app keybox">
+  <div class="fm-box">
+    <div class="fm-bar">
+      <button class="icon-btn" id="appsBack" type="button" aria-label="Back">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+      </button>
+      <input id="appsSearch" class="apps-search" type="text" placeholder="Search apps">
+      <button class="icon-btn" id="appsMenu" type="button" aria-label="Menu" aria-haspopup="true">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>
+      </button>
+    </div>
+    <div id="appsMenuPop" class="menu-pop" hidden>
+      <button type="button" data-act="add" data-i="pak_add_dlg">Add custom package</button>
+      <button type="button" data-act="selall" data-i="pak_selall">Select all</button>
+      <button type="button" data-act="unnec" data-i="pak_unnec">Deselect unnecessary</button>
+    </div>
+    <div class="fm-list applist" id="appsList"></div>
+    <div class="fm-foot">
+      <button class="fm-cancel" id="appsOk" type="button" data-i="pak_ok">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add-custom-package input dialog (from the Target apps menu) -->
+<div class="fm" id="pkgDlg" hidden role="dialog" aria-modal="true" aria-labelledby="pkgDlgTitle">
+  <div class="fm-box kbp-box" style="max-width:360px">
+    <div class="cfg-head">
+      <div class="cfg-htext"><div class="cfg-name" id="pkgDlgTitle" data-i="pak_add_dlg">Add custom package</div></div>
+    </div>
+    <div style="padding:0 18px 6px">
+      <input id="pkgInput" class="apps-search" type="text" autocapitalize="none" autocomplete="off" spellcheck="false" placeholder="package.name" style="width:100%">
+    </div>
+    <div class="fm-foot">
+      <button class="fm-cancel ghosttext" id="pkgCancel" type="button" data-i="fm_cancel">Cancel</button>
+      <button class="fm-cancel" id="pkgOk" type="button" data-i="pak_ok">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- long-press: per-app mode + keybox entry -->
+<div class="fm" id="cfg" hidden role="dialog" aria-modal="true" aria-labelledby="cfgName">
+  <div class="fm-box kbp-box">
+    <div class="cfg-head">
+      <img class="app-icon lg" id="cfgIcon" alt="" draggable="false">
+      <div class="cfg-htext">
+        <div class="cfg-name" id="cfgName">App</div>
+        <div class="cfg-pkg" id="cfgPkg"></div>
+      </div>
+    </div>
+    <div class="kbp-scroll">
+      <div class="kbp-sec" data-i="pak_mode">Mode</div>
+      <div class="kbp-group" role="group" aria-label="Mode">
+        <button class="kbp-opt" id="cfgAuto" type="button" data-m="auto" aria-pressed="true"><div><div class="t" data-i="pak_auto">Auto</div><div class="s" data-i="pak_auto_s">Let AlwaysStrong decide</div></div><svg class="chk" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg></button>
+        <button class="kbp-opt" id="cfgGen" type="button" data-m="gen" aria-pressed="false"><div><div class="t" data-i="pak_gen">Generate</div><div class="s" data-i="pak_gen_s">Generate the full cert chain (!)</div></div><svg class="chk" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg></button>
+        <button class="kbp-opt" id="cfgHack" type="button" data-m="hack" aria-pressed="false"><div><div class="t" data-i="pak_hack">Hack</div><div class="s" data-i="pak_hack_s">Hack the leaf cert (?)</div></div><svg class="chk" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg></button>
+      </div>
+      <div class="kbp-sec" data-i="pak_keybox">Keybox</div>
+      <div class="kbp-group">
+        <button class="cfg-kbrow" id="cfgKbRow" type="button">
+          <div class="fm-info"><div class="fm-nm" id="cfgKbName">Default keybox</div></div>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="fm-foot">
+      <button class="fm-cancel ghosttext" id="cfgClose" type="button" data-i="fm_cancel">Cancel</button>
+      <button class="fm-cancel" id="cfgApply" type="button" data-i="pak_apply">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- keybox-only picker (opened from the config row; no mode here) -->
+<div class="fm" id="kbp" hidden role="dialog" aria-modal="true" aria-labelledby="kbpTitle">
+  <div class="fm-box kbp-box">
+    <div class="fm-bar">
+      <button class="icon-btn" id="kbpBack" type="button" aria-label="Back">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+      </button>
+      <div class="fm-crumb" id="kbpTitle" data-i="pak_keybox">Keybox</div>
+    </div>
+    <div class="fm-list" id="kbpList"></div>
+    <div class="fm-foot">
+      <button class="fm-cancel" id="kbpOk" type="button" data-i="pak_ok">OK</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const I={
+  en:{auto:"Configuration",fp_t:"Fingerprint",fp_s:"Automatic Pixel Canary refresh",kb_t:"Keybox",kb_s:"Auto check, writes only if newer",status:"Keybox status",ind_t:"Status indicator",ind_s:"Show status prefix in description",rs_t:"Block ROM spoof",rs_s:"Disable PixelProps / pihooks engines",int_t:"Check every",donate:"Donate",ckbx:"Custom keybox",ck_t:"Custom keybox",ck_s:"Use your own keybox — auto-fetch off",ck_pick:"Select keybox file",ck_none:"No file selected",ck_have:"keybox.xml",ck_bad:"Not a valid keybox",ck_sel:"Selected keybox:",fm_new:"Newest",fm_old:"Oldest",fm_empty:"Empty folder",fm_cancel:"Cancel",pak:"Target apps",pak_t:"Target apps",pak_s:"Choose apps, mode & keybox",pak_search:"Search apps",pak_default:"Default keybox",pak_import:"Import keybox file…",pak_mode:"Mode",pak_auto:"Auto",pak_auto_s:"Let AlwaysStrong decide",pak_gen:"Generate",pak_gen_s:"Generate the full cert chain (!)",pak_hack:"Hack",pak_hack_s:"Hack the leaf cert (?)",pak_keybox:"Keybox",pak_apply:"Apply",pak_ok:"OK",logs:"Collect logs",logs_run:"Collecting…",logs_done:"Saved:",logs_fail:"Failed — run via root shell",logs_slow:"Still running — check /sdcard",tab_main:"Configuration",tab_adv:"Advanced",adv:"Advanced",spoofvars:"Spoof variables",pak_menu:"Menu",pak_selall:"Select all",pak_unnec:"Deselect unnecessary",pak_add_dlg:"Add custom package",pak_add_ph2:"package.name",pak_selall_done:"All apps selected",pak_unnec_done:"Deselected unnecessary apps",adv_note:"These are for edge cases. Leave them off unless an app needs it — the defaults are what pass STRONG.",spf_t:"Spoof system props",spf_s:"Turn off if a wallet/bank app fails",imp_t:"Import fingerprint",imp_s:"Load a pif.json or pif.prop file",hrm_t:"Hide ROM identity",hrm_s:"Also hides ROM version & fast-charge toggle",spp_t:"Spoof security patch",spp_s:"Keep the system patch date equal to the attested one — off shows the real date after a reboot",applied:"Applied — restarting Play Integrity",imp_run:"Importing…",imp_ok:"Fingerprint imported",imp_bad:"Import failed",imp_none:"Not a pif.json / pif.prop file",pak_add:"Add custom package",pak_add_ph:"com.example.app",pak_add_bad:"Enter a valid package name"},
+  tr:{auto:"Yapılandırma",fp_t:"Fingerprint",fp_s:"Otomatik Pixel Canary yenileme",kb_t:"Keybox",kb_s:"Otomatik kontrol, sadece yeniyse yazar",status:"Keybox durumu",ind_t:"Durum göstergesi",ind_s:"Açıklamada durum öneki göster",rs_t:"ROM spoofunu engelle",rs_s:"PixelProps / pihooks motorlarını kapat",int_t:"Kontrol aralığı",donate:"Bağış",ckbx:"Özel keybox",ck_t:"Özel keybox",ck_s:"Kendi keyboxını kullan — oto çekme kapalı",ck_pick:"Keybox dosyası seç",ck_none:"Dosya seçilmedi",ck_have:"keybox.xml",ck_bad:"Geçerli keybox değil",ck_sel:"Seçili keybox:",fm_new:"En yeni",fm_old:"En eski",fm_empty:"Boş klasör",fm_cancel:"İptal",pak:"Hedef uygulamalar",pak_t:"Hedef uygulamalar",pak_s:"Uygulama, mod & keybox seç",pak_search:"Uygulama ara",pak_default:"Varsayılan keybox",pak_import:"Keybox dosyası içe aktar…",pak_mode:"Mod",pak_auto:"Oto",pak_auto_s:"AlwaysStrong karar versin",pak_gen:"Üret (Generate)",pak_gen_s:"Tüm sertifika zincirini üret (!)",pak_hack:"Hack",pak_hack_s:"Leaf sertifikayı değiştir (?)",pak_keybox:"Keybox",pak_apply:"Uygula",pak_ok:"Tamam",logs:"Log topla",logs_run:"Toplanıyor…",logs_done:"Kaydedildi:",logs_fail:"Başarısız — root shell'den çalıştır",logs_slow:"Hâlâ çalışıyor — /sdcard klasörüne bak",tab_main:"Yapılandırma",tab_adv:"Gelişmiş",adv:"Gelişmiş",spoofvars:"Spoof değişkenleri",pak_menu:"Menü",pak_selall:"Tümünü seç",pak_unnec:"Gereksizleri kaldır",pak_add_dlg:"Özel paket ekle",pak_add_ph2:"paket.adi",pak_selall_done:"Tüm uygulamalar seçildi",pak_unnec_done:"Gereksiz uygulamalar kaldırıldı",adv_note:"Bunlar istisnai durumlar içindir. Bir uygulama gerektirmedikçe kapalı bırakın — STRONG'u geçiren varsayılanlardır.",spf_t:"Sistem proplarını spoofla",spf_s:"Cüzdan/banka uygulaman çalışmıyorsa kapat",imp_t:"Fingerprint içe aktar",imp_s:"pif.json veya pif.prop dosyası yükle",hrm_t:"ROM kimliğini gizle",hrm_s:"ROM sürümünü ve hızlı şarj anahtarını da gizler",spp_t:"Güvenlik yamasını spoofla",spp_s:"Sistem yama tarihini attestation ile aynı tutar — kapatınca yeniden başlatmada gerçek tarih döner",applied:"Uygulandı — Play Integrity yeniden başlatılıyor",imp_run:"İçe aktarılıyor…",imp_ok:"Fingerprint içe aktarıldı",imp_bad:"İçe aktarma başarısız",imp_none:"pif.json / pif.prop dosyası değil",pak_add:"Özel paket ekle",pak_add_ph:"com.example.app",pak_add_bad:"Geçerli bir paket adı gir"},
+  ru:{auto:"Автообновление",fp_t:"Fingerprint",fp_s:"Ежечасно с Pixel Canary",kb_t:"Keybox",kb_s:"Ежечасно проверка, запись только если новее",status:"Статус keybox",ind_t:"Индикатор",ind_s:"Показывать префикс в описании",rs_t:"Блок ROM-спуфа",rs_s:"Отключить PixelProps / pihooks",int_t:"Интервал",donate:"Поддержать",logs:"Собрать логи",logs_run:"Сбор…",logs_done:"Сохранено:",logs_fail:"Ошибка — запустите через root shell",logs_slow:"Ещё выполняется — см. /sdcard"},
+  es:{auto:"Actualización automática",fp_t:"Fingerprint",fp_s:"Refresco horario desde Pixel Canary",kb_t:"Keybox",kb_s:"Comprobación horaria, escribe solo si es nuevo",status:"Estado del keybox",ind_t:"Indicador",ind_s:"Mostrar prefijo de estado en la descripción",rs_t:"Bloquear ROM spoof",rs_s:"Desactivar PixelProps / pihooks",int_t:"Intervalo",donate:"Donar",logs:"Recoger registros",logs_run:"Recogiendo…",logs_done:"Guardado:",logs_fail:"Falló — ejecuta desde una shell root",logs_slow:"Aún en curso — mira en /sdcard"},
+  pt:{auto:"Atualização automática",fp_t:"Fingerprint",fp_s:"Atualização horária do Pixel Canary",kb_t:"Keybox",kb_s:"Verificação horária, grava só se for novo",status:"Status do keybox",ind_t:"Indicador",ind_s:"Mostrar prefixo de status na descrição",rs_t:"Bloquear ROM spoof",rs_s:"Desativar PixelProps / pihooks",int_t:"Intervalo",donate:"Doar",logs:"Coletar logs",logs_run:"Coletando…",logs_done:"Salvo:",logs_fail:"Falhou — execute via shell root",logs_slow:"Ainda em execução — veja /sdcard"},
+  de:{auto:"Auto-Update",fp_t:"Fingerprint",fp_s:"Stündliche Pixel-Canary-Aktualisierung",kb_t:"Keybox",kb_s:"Stündlich prüfen, nur bei Neuerem schreiben",status:"Keybox-Status",ind_t:"Statusanzeige",ind_s:"Statuspräfix in der Beschreibung",rs_t:"ROM-Spoof blockieren",rs_s:"PixelProps / pihooks deaktivieren",int_t:"Intervall",donate:"Spenden",logs:"Logs sammeln",logs_run:"Sammle…",logs_done:"Gespeichert:",logs_fail:"Fehlgeschlagen — per Root-Shell ausführen",logs_slow:"Läuft noch — siehe /sdcard"},
+  fr:{auto:"Mise à jour auto",fp_t:"Fingerprint",fp_s:"Rafraîchissement horaire depuis Pixel Canary",kb_t:"Keybox",kb_s:"Vérification horaire, écrit seulement si plus récent",status:"Statut keybox",ind_t:"Indicateur",ind_s:"Afficher le préfixe d'état",rs_t:"Bloquer le spoof ROM",rs_s:"Désactiver PixelProps / pihooks",int_t:"Intervalle",donate:"Faire un don",logs:"Collecter les journaux",logs_run:"Collecte…",logs_done:"Enregistré :",logs_fail:"Échec — lancez via un shell root",logs_slow:"Toujours en cours — voir /sdcard"},
+  it:{auto:"Aggiornamento automatico",fp_t:"Fingerprint",fp_s:"Aggiornamento orario da Pixel Canary",kb_t:"Keybox",kb_s:"Controllo orario, scrive solo se più recente",status:"Stato keybox",ind_t:"Indicatore",ind_s:"Mostra prefisso di stato",rs_t:"Blocca spoof ROM",rs_s:"Disattiva PixelProps / pihooks",int_t:"Intervallo",donate:"Dona",logs:"Raccogli log",logs_run:"Raccolta…",logs_done:"Salvato:",logs_fail:"Non riuscito — esegui da shell root",logs_slow:"Ancora in corso — controlla /sdcard"},
+  id:{auto:"Pembaruan otomatis",fp_t:"Fingerprint",fp_s:"Penyegaran tiap jam dari Pixel Canary",kb_t:"Keybox",kb_s:"Cek tiap jam, hanya tulis jika lebih baru",status:"Status keybox",ind_t:"Indikator",ind_s:"Tampilkan awalan status di deskripsi",rs_t:"Blokir spoof ROM",rs_s:"Nonaktifkan PixelProps / pihooks",int_t:"Interval",donate:"Donasi",logs:"Kumpulkan log",logs_run:"Mengumpulkan…",logs_done:"Disimpan:",logs_fail:"Gagal — jalankan lewat root shell",logs_slow:"Masih berjalan — cek /sdcard"},
+  vi:{auto:"Tự cập nhật",fp_t:"Fingerprint",fp_s:"Làm mới mỗi giờ từ Pixel Canary",kb_t:"Keybox",kb_s:"Kiểm tra mỗi giờ, chỉ ghi khi mới hơn",status:"Trạng thái keybox",ind_t:"Chỉ báo",ind_s:"Hiện tiền tố trạng thái trong mô tả",rs_t:"Chặn giả mạo ROM",rs_s:"Vô hiệu hóa PixelProps / pihooks",int_t:"Khoảng kiểm tra",donate:"Quyên góp",logs:"Thu thập nhật ký",logs_run:"Đang thu thập…",logs_done:"Đã lưu:",logs_fail:"Thất bại — chạy qua root shell",logs_slow:"Vẫn đang chạy — kiểm tra /sdcard"},
+  ar:{auto:"تحديث تلقائي",fp_t:"البصمة",fp_s:"تحديث كل ساعة من Pixel Canary",kb_t:"Keybox",kb_s:"فحص كل ساعة، يكتب فقط إذا كان أحدث",status:"حالة keybox",ind_t:"مؤشر الحالة",ind_s:"عرض بادئة الحالة في الوصف",rs_t:"حظر انتحال ROM",rs_s:"تعطيل PixelProps / pihooks",int_t:"التحقق كل",donate:"تبرع",logs:"جمع السجلات",logs_run:"يجري الجمع…",logs_done:"تم الحفظ:",logs_fail:"فشل — شغّله عبر صدفة الجذر",logs_slow:"لا يزال يعمل — راجع /sdcard"},
+  zh:{auto:"自动更新",fp_t:"指纹",fp_s:"每小时从 Pixel Canary 刷新",kb_t:"Keybox",kb_s:"每小时检查，仅在更新时写入",status:"Keybox 状态",ind_t:"状态指示",ind_s:"在描述中显示状态前缀",rs_t:"屏蔽 ROM 伪装",rs_s:"禁用 PixelProps / pihooks",int_t:"检查间隔",donate:"捐赠",logs:"收集日志",logs_run:"收集中…",logs_done:"已保存：",logs_fail:"失败 — 请通过 root shell 运行",logs_slow:"仍在运行 — 请查看 /sdcard"},
+  ja:{auto:"自動更新",fp_t:"フィンガープリント",fp_s:"Pixel Canaryから毎時更新",kb_t:"Keybox",kb_s:"毎時チェック、新しい場合のみ書き込み",status:"Keybox の状態",ind_t:"ステータス表示",ind_s:"説明にステータスプレフィックスを表示",rs_t:"ROM 偽装をブロック",rs_s:"PixelProps / pihooks を無効化",int_t:"チェック間隔",donate:"寄付",logs:"ログを収集",logs_run:"収集中…",logs_done:"保存しました:",logs_fail:"失敗 — root シェルで実行してください",logs_slow:"実行中 — /sdcard を確認"},
+  ko:{auto:"자동 업데이트",fp_t:"지문",fp_s:"매시간 Pixel Canary에서 새로고침",kb_t:"Keybox",kb_s:"매시간 확인, 새 것일 때만 기록",status:"Keybox 상태",ind_t:"상태 표시",ind_s:"설명에 상태 접두사 표시",rs_t:"ROM 스푸핑 차단",rs_s:"PixelProps / pihooks 비활성화",int_t:"확인 간격",donate:"후원",logs:"로그 수집",logs_run:"수집 중…",logs_done:"저장됨:",logs_fail:"실패 — 루트 셸에서 실행하세요",logs_slow:"실행 중 — /sdcard 확인"},
+  hi:{auto:"स्वतः अपडेट",fp_t:"फिंगरप्रिंट",fp_s:"हर घंटे Pixel Canary से ताज़ा",kb_t:"Keybox",kb_s:"हर घंटे जाँच, नया होने पर ही लिखें",status:"Keybox स्थिति",ind_t:"स्थिति संकेतक",ind_s:"विवरण में स्थिति उपसर्ग दिखाएं",rs_t:"ROM स्पूफ ब्लॉक करें",rs_s:"PixelProps / pihooks बंद करें",int_t:"हर बार जाँच",donate:"दान",logs:"लॉग एकत्र करें",logs_run:"एकत्र हो रहा…",logs_done:"सहेजा गया:",logs_fail:"विफल — रूट शेल से चलाएँ",logs_slow:"अभी भी चल रहा — /sdcard देखें"},
+};
+const RTL=new Set(["ar","he","fa","ur"]);
+const NAMES={en:"English",tr:"Türkçe",ru:"Русский",es:"Español",pt:"Português",de:"Deutsch",fr:"Français",it:"Italiano",id:"Bahasa Indonesia",vi:"Tiếng Việt",ar:"العربية",zh:"中文",ja:"日本語",ko:"한국어",hi:"हिन्दी"};
+
+function pickLang(){
+  const saved=localStorage.getItem("lang");
+  if(saved && I[saved]) return saved;
+  const langs=[navigator.language,...(navigator.languages||[])];
+  for(const l of langs){
+    if(!l) continue;
+    const base=l.toLowerCase().split("-")[0];
+    if(I[base]) return base;
+  }
+  return "en";
+}
+const L=pickLang();
+const T=I[L];
+document.documentElement.lang=L;
+if(RTL.has(L)) document.documentElement.dir="rtl";
+document.querySelectorAll("[data-i]").forEach(el=>{
+  const k=el.dataset.i;
+  if(T[k]) el.textContent=T[k];
+});
+
+const langBtn=document.getElementById("langBtn");
+const langPop=document.getElementById("langPop");
+Object.keys(NAMES).filter(k=>I[k]).forEach(k=>{
+  const b=document.createElement("button");
+  b.textContent=NAMES[k];
+  if(k===L) b.className="active";
+  b.addEventListener("click",()=>{
+    localStorage.setItem("lang",k);
+    location.reload();
+  });
+  langPop.appendChild(b);
+});
+langBtn.addEventListener("click",e=>{
+  e.stopPropagation();
+  langPop.hidden=!langPop.hidden;
+});
+document.addEventListener("click",e=>{
+  if(!langPop.hidden && !langPop.contains(e.target)) langPop.hidden=true;
+});
+
+function ksuExec(cmd){
+  return new Promise(resolve=>{
+    if(typeof ksu==="undefined"||!ksu.exec){
+      resolve({errno:-1,stdout:"",stderr:"no bridge"});
+      return;
+    }
+    const cb="__cb"+Date.now()+Math.floor(Math.random()*1e6);
+    window[cb]=(errno,stdout,stderr)=>{
+      delete window[cb];
+      resolve({errno,stdout:stdout||"",stderr:stderr||""});
+    };
+    try{ ksu.exec(cmd,"{}",cb); }
+    catch(e){ delete window[cb]; resolve({errno:-1,stdout:"",stderr:String(e)}); }
+  });
+}
+
+// External-link opener for KSU/APatch WebView (which traps navigation
+// in the panel). MMRL respects normal <a> so we only fire am-intent
+// when the ksu bridge is present.
+function openExternal(url){
+  const safe=url.replace(/'/g,"'\\''");
+  if(typeof ksu!=="undefined" && ksu.exec){
+    ksuExec(`am start -a android.intent.action.VIEW -d '${safe}' >/dev/null 2>&1`);
+    return true;
+  }
+  return false;
+}
+document.querySelectorAll("a[data-ext]").forEach(a=>{
+  a.addEventListener("click",e=>{ if(openExternal(a.href)) e.preventDefault(); });
+});
+
+const CFG="/data/adb/tricky_store";
+const FP_FLAG=CFG+"/no_auto_fp";
+const KB_FLAG=CFG+"/no_auto_keybox";
+const IND_FLAG=CFG+"/no_auto_indicator";
+const RS_FLAG=CFG+"/no_rom_spoof_block";
+// Security-patch prop spoof (sync_patch.sh boot): ON by default so
+// Build.VERSION.SECURITY_PATCH matches the attested osPatchLevel (attestation
+// checkers flag a mismatch). OFF writes this opt-out file; the real date comes
+// back on the next boot.
+const SPP_FLAG=CFG+"/no_spoof_patch_props";
+const CK_FLAG=CFG+"/custom_keybox";
+const KEYBOX=CFG+"/keybox.xml";
+const INT_FILE=CFG+"/hourly_interval_sec";
+const MOD="/data/adb/modules/tricky_store";
+const KEY_HOST="http://evoker.qzz.io";
+
+// Collect logs -> /sdcard/AlwaysStrong-log-<timestamp>.txt for a GitHub issue.
+// The button label stays put; the result shows in a toast so a long path never
+// mangles the footer.
+let toastT=null;
+function toast(msg,ms){
+  let el=document.getElementById("toast");
+  if(!el){ el=document.createElement("div"); el.id="toast"; el.className="toast"; document.body.appendChild(el); }
+  el.textContent=msg; el.classList.add("show");
+  clearTimeout(toastT);
+  if(ms) toastT=setTimeout(()=>el.classList.remove("show"),ms);
+}
+const logBtn=document.getElementById("logBtn");
+if(logBtn){
+  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+  logBtn.addEventListener("click",async()=>{
+    if(logBtn.dataset.busy) return;
+    logBtn.dataset.busy="1";
+    toast(T.logs_run||"Collecting…",0);
+    // launch detached so the collection (network probes, logcat) never blocks
+    // the UI, then poll the pointer file it writes when done.
+    const start=await ksuExec(`rm -f ${CFG}/.last_log; (sh ${MOD}/collect_logs.sh >/dev/null 2>&1 &) ; echo ok`);
+    if(start.errno!==0){
+      toast(T.logs_fail||"Failed — run via root shell",5000);
+      delete logBtn.dataset.busy; return;
+    }
+    let path="";
+    for(let i=0;i<30;i++){            // up to ~30s
+      await sleep(1000);
+      const r=await ksuExec(`cat ${CFG}/.last_log 2>/dev/null`);
+      path=(r.stdout||"").trim();
+      if(path) break;
+    }
+    if(path) toast((T.logs_done||"Saved:")+" "+path,8000);
+    else     toast(T.logs_slow||"Still running — check /sdcard",6000);
+    delete logBtn.dataset.busy;
+  });
+}
+
+// Current repo keybox name (evokerrkeyNN) from /meta.json — display only; the
+// keybox itself is still fetched from /key. Fetched once, used by the status
+// pill and the custom-keybox row.
+let metaKeyName="";
+async function fetchMetaName(){
+  const r=await ksuExec(`A=$(ls ${MOD}/bin/*/asfetch 2>/dev/null | head -1); [ -n "$A" ] && "$A" -T 8 ${KEY_HOST}/meta.json 2>/dev/null | grep -o '"filename"[^,]*' | head -1`);
+  const m=(r.stdout||"").match(/"([^"]+)\.xml"/);
+  metaKeyName = m ? m[1] : "";
+}
+
+// flag absent = feature enabled
+async function readEnabled(path){
+  const r=await ksuExec(`[ -f "${path}" ] && echo 0 || echo 1`);
+  return r.stdout.trim()==="1";
+}
+async function writeEnabled(path,on){
+  await ksuExec(on?`rm -f "${path}"`:`mkdir -p "${CFG}" && touch "${path}"`);
+}
+// presence-based flag (file present = ON), opposite of the *_FLAG toggles above
+async function flagPresent(path){
+  const r=await ksuExec(`[ -f "${path}" ] && echo 1 || echo 0`);
+  return r.stdout.trim()==="1";
+}
+// presence flag writer: ON -> create the file, OFF -> remove it
+async function writePresence(path,on){
+  await ksuExec(on?`mkdir -p "${CFG}" && touch "${path}"`:`rm -f "${path}"`);
+}
+
+async function loadStatus(){
+  const r=await ksuExec(`grep -m1 '^description=' "${MOD}/module.prop" 2>/dev/null | sed -e 's/^description=//' | awk '{print $1}'`);
+  const s=(r.stdout||"").trim();
+  if(s && /[🟢🔴🟡⚫⚪]/.test(s)){
+    document.getElementById("statusVal").textContent=s;
+    document.getElementById("statusRow").hidden=false;
+  } else {
+    document.getElementById("statusRow").hidden=true;
+  }
+  // Show which keybox is in use next to the health (label stays "Keybox status")
+  document.getElementById("kbName").textContent=metaKeyName||"";
+}
+
+async function init(){
+  const v=await ksuExec(`grep '^version=' "${MOD}/module.prop" 2>/dev/null | cut -d= -f2-`);
+  document.getElementById("ver").textContent=(v.stdout.trim()||"v?");
+
+  // Which of the 9 variants is installed: the PI line (engine.sh ENGINE) and the
+  // keystore engine (attest.sh ATTEST). Both already live in the module — no extra
+  // file — and the pair is too long for the module name, so it lands here instead.
+  try{
+    const eng=(await ksuExec(`grep -m1 '^ENGINE=' "${MOD}/engine.sh" 2>/dev/null | cut -d= -f2-`)).stdout.trim();
+    const att=(await ksuExec(`grep -m1 '^ATTEST=' "${MOD}/attest.sh" 2>/dev/null | cut -d= -f2-`)).stdout.trim();
+    const piMap={fork:"Fork",inject:"Inject",none:"Lite"};
+    const ksMap={tee:"TEESimulator-RS",trickystoreoss:"TrickyStoreOSS",teesim:"TEESimulator",omk:"OhMyKeymint"};
+    const parts=[piMap[eng],ksMap[att]].filter(Boolean);
+    document.getElementById("variant").textContent=parts.join(" · ");
+  }catch(e){}
+
+  await fetchMetaName();
+  await loadStatus();
+
+  const fp=document.getElementById("fp");
+  const kb=document.getElementById("kb");
+  const ind=document.getElementById("ind");
+  const rs=document.getElementById("rs");
+  const intInp=document.getElementById("int");
+  fp.checked=await readEnabled(FP_FLAG);
+  kb.checked=await readEnabled(KB_FLAG);
+  ind.checked=await readEnabled(IND_FLAG);
+  rs.checked=await readEnabled(RS_FLAG);
+  fp.addEventListener("change",e=>writeEnabled(FP_FLAG,e.target.checked));
+  kb.addEventListener("change",e=>writeEnabled(KB_FLAG,e.target.checked));
+  ind.addEventListener("change",async e=>{
+    await writeEnabled(IND_FLAG,e.target.checked);
+    // Off → ask status_fetch to restore description= to clean base text.
+    // On  → next auto/manual run will write the prefix back in.
+    if(!e.target.checked) await ksuExec(`sh "${MOD}/status_fetch.sh" strip`);
+    await loadStatus();
+  });
+  rs.addEventListener("change",e=>writeEnabled(RS_FLAG,e.target.checked));
+
+  const spp=document.getElementById("spp");
+  spp.checked=await readEnabled(SPP_FLAG);
+  spp.addEventListener("change",async e=>{
+    await writeEnabled(SPP_FLAG,e.target.checked);
+    // On → pin the props right away (same call boot makes). Off → the untouched
+    // value is only known to init, so it returns on the next boot.
+    if(e.target.checked) await ksuExec(`sh "${MOD}/sync_patch.sh" boot >/dev/null 2>&1`);
+  });
+
+  // ---- tabs: Configuration / Advanced ----
+  const tabMain=document.getElementById("tabMain"), tabAdv=document.getElementById("tabAdv");
+  const tabBtnMain=document.getElementById("tabBtnMain"), tabBtnAdv=document.getElementById("tabBtnAdv");
+  function showTab(adv){
+    tabMain.hidden=adv; tabAdv.hidden=!adv;
+    tabBtnMain.classList.toggle("active",!adv);
+    tabBtnAdv.classList.toggle("active",adv);
+  }
+  tabBtnMain.addEventListener("click",()=>showTab(false));
+  tabBtnAdv.addEventListener("click",()=>showTab(true));
+
+  // ---- advanced: raw PIF spoof variables ----
+  // One toggle per spoof*/DEBUG flag in the active pif, by its real name.
+  // Flipping a toggle writes a per-key override into spoof.conf and re-enforces,
+  // so it survives the hourly re-apply. The STRONG defaults live in engine.sh;
+  // only flip one if a specific app needs it (e.g. spoofProps off for a wallet).
+  const SPOOF_CONF=CFG+"/spoof.conf";
+  const PIF_DIR="/data/adb/modules/playintegrityfix";   // a standalone PlayIntegrityFork
+  const spoofVarsEl=document.getElementById("spoofVars");
+  let spoofStyle="num"; // "num" (1/0, Fork) | "bool" (true/false, inject-s)
+  // Where the toggles read from and write to:
+  //   "as"   fork/inject — AlwaysStrong's bundled PIF, via spoof.conf + reapply_spoof
+  //   "pif"  Lite + a standalone PlayIntegrityFork — that module's own custom.pif.prop,
+  //          applied with its killpi.sh (there is no bundled engine to enforce here)
+  //   "none" Lite with no PIF installed — nothing to configure, card hidden
+  let spoofMode="as";
+  const isFalseVal=v=>{ v=String(v).trim().toLowerCase(); return v==="0"||v==="false"||v==="off"||v==="no"; };
+  const escKey=s=>String(s).replace(/[^A-Za-z0-9_]/g,"");
+  // The FULL spoof-flag set each PIF flavour supports, so the Advanced card offers
+  // every option — not just the ones already written to the prop. Fork uses numeric
+  // 1/0 and its own flags; inject-s uses true/false and a wider set (incl. spoofConfig
+  // + DEBUG). FLAG_ON lists the flags whose STRONG default is ON.
+  const FLAGSET={
+    fork:  ["spoofProvider","spoofVendingFinger","spoofBuild","spoofProps","spoofSignature","spoofVendingSdk"],
+    inject:["spoofBuild","spoofProps","spoofProvider","spoofSignature","spoofVendingBuild","spoofVendingSdk","DEBUG"]
+  };
+  const FLAG_ON={spoofVendingFinger:1,spoofBuild:1,spoofProps:1,spoofVendingBuild:1};
+  let spoofKind="";  // "fork" | "inject" — set from lite_pif_sync --detect on the Lite line
+  const spoofSrc=()=> spoofMode==="pif"
+    ? `"${PIF_DIR}/custom.pif.prop" "${PIF_DIR}/pif.prop"`
+    : `"${MOD}/custom.pif.prop" "${CFG}/custom.pif.prop" "${MOD}/pif.prop" "${CFG}/pif.prop"`;
+  async function loadSpoofVars(){
+    const r=await ksuExec(`for f in ${spoofSrc()}; do [ -s "$f" ] && grep -qiE '^(spoof|DEBUG)' "$f" && { grep -iE '^(spoof|DEBUG)' "$f"; break; }; done`);
+    const cur={};
+    (r.stdout||"").split("\n").forEach(l=>{
+      l=l.trim(); const i=l.indexOf("="); if(i<1) return;
+      const k=escKey(l.slice(0,i).trim()), v=l.slice(i+1).trim();
+      if(/^(true|false)$/i.test(v)) spoofStyle="bool";           // detect style for the bundled ("as") builds
+      if(/^(spoof|DEBUG)/i.test(k)) cur[k]=!isFalseVal(v);
+    });
+    // On the Lite line the flavour fixes the value style and the full option list.
+    if(spoofMode==="pif") spoofStyle = spoofKind==="inject" ? "bool" : "num";
+    const set = (spoofMode==="pif" && FLAGSET[spoofKind]) ? FLAGSET[spoofKind] : Object.keys(cur);
+    // full set, current value where present, otherwise the STRONG default
+    return set.map(k=>({ k, on: (k in cur) ? cur[k] : !!FLAG_ON[k] }));
+  }
+  function renderSpoofVars(vars){
+    if(!vars.length){ spoofVarsEl.innerHTML=`<div class="fm-empty">—</div>`; return; }
+    spoofVarsEl.innerHTML=vars.map(v=>
+      `<div class="row"><div class="row-lbl"><div class="row-t spoofvar-t">${v.k}</div></div>`
+      +`<label class="sw"><input type="checkbox" data-k="${v.k}"${v.on?" checked":""}><span class="sl"></span></label></div>`
+    ).join("");
+  }
+  spoofVarsEl.addEventListener("change",async e=>{
+    const inp=e.target.closest("input[data-k]"); if(!inp) return;
+    const k=escKey(inp.dataset.k), on=inp.checked;
+    const val = spoofStyle==="bool" ? (on?"true":"false") : (on?"1":"0");
+    if(spoofMode==="pif"){
+      // Lite: persist the choice as a spoof.conf override (this survives the
+      // standalone PIF's autopif, which keeps resetting its custom.pif.prop), then
+      // lite_pif_sync re-asserts it onto the PIF's prop and restarts the PIF.
+      await ksuExec(`mkdir -p "${CFG}"; f="${SPOOF_CONF}"; touch "$f"; grep -v "^${k}=" "$f" 2>/dev/null > "$f.tmp"; mv "$f.tmp" "$f"; printf '%s=%s\\n' "${k}" "${val}" >> "$f"; sh "${MOD}/lite_pif_sync.sh" >/dev/null 2>&1`);
+    } else {
+      // fork/inject: per-key override in spoof.conf, then re-enforce on the bundled PIF.
+      await ksuExec(`mkdir -p "${CFG}"; f="${SPOOF_CONF}"; touch "$f"; grep -v "^${k}=" "$f" 2>/dev/null > "$f.tmp"; mv "$f.tmp" "$f"; printf '%s=%s\\n' "${k}" "${val}" >> "$f"; sh "${MOD}/reapply_spoof.sh" >/dev/null 2>&1`);
+    }
+    toast(T.applied||"Applied — restarting Play Integrity",2500);
+  });
+  // Pick the target. On the Lite line there's no bundled engine to enforce flags,
+  // so the toggles drive a standalone PlayIntegrityFork if one is installed; with
+  // no PIF there's nothing to configure, so the card is hidden.
+  {
+    const _e=(await ksuExec(`grep -m1 '^ENGINE=' "${MOD}/engine.sh" 2>/dev/null | cut -d= -f2-`)).stdout.trim();
+    const _fpRow=document.getElementById("fpRow");   // hidden by default in the HTML
+    if(_e==="none"){
+      // Lite ships no fingerprint engine — a standalone PIF owns the fingerprint and
+      // AlwaysStrong mirrors it — so the "auto fingerprint refresh" toggle is
+      // meaningless here; it stays hidden. Show the spoof card for a recognised
+      // standalone PlayIntegrityFork OR Fix inject-s (lite_pif_sync --detect prints
+      // its kind); the toggles read that PIF's own flags (so inject-s naturally shows
+      // spoofVendingBuild, not Fork's spoofVendingFinger). No module or an id-squatter
+      // (Integrity Box) -> hidden, nothing of ours to configure.
+      const _k=(await ksuExec(`sh "${MOD}/lite_pif_sync.sh" --detect 2>/dev/null`)).stdout.trim();
+      spoofMode = (_k==="fork"||_k==="inject") ? "pif" : "none";
+      spoofKind = _k;   // drives the full flag list + value style (fork=num, inject=bool)
+    } else if(_fpRow){
+      _fpRow.hidden=false;   // fork / inject builds do fetch a fingerprint — show the toggle
+    }
+    const _sec=document.getElementById("spoofSection");
+    if(spoofMode==="none"){ if(_sec) _sec.hidden=true; }
+    else { renderSpoofVars(await loadSpoofVars()); }
+  }
+
+  const cur=await ksuExec(`cat "${INT_FILE}" 2>/dev/null`);
+  const curSec=parseInt((cur.stdout||"").trim(),10);
+  intInp.value=Number.isFinite(curSec)&&curSec>=60 ? Math.round(curSec/60) : 60;
+  const saveInterval=async()=>{
+    let m=parseInt(intInp.value,10);
+    if(!Number.isFinite(m)||m<1) m=60;
+    intInp.value=m;
+    await ksuExec(`mkdir -p "${CFG}" && echo ${m*60} > "${INT_FILE}"`);
+  };
+  intInp.addEventListener("blur",saveInterval);
+  intInp.addEventListener("keydown",e=>{ if(e.key==="Enter") e.target.blur(); });
+
+  // ---- custom keybox + file manager ----
+  const ck=document.getElementById("ck");
+  const ckFileRow=document.getElementById("ckFileRow");
+  const ckName=document.getElementById("ckName");
+  const ckSize=document.getElementById("ckSize");
+  const ckPick=document.getElementById("ckPick");
+  const ckDel=document.getElementById("ckDel");
+  const kbRow=kb.closest(".row");
+  const KBNAME=CFG+"/.custom_keybox_name";
+
+  const shq=s=>"'"+String(s).replace(/'/g,"'\\''")+"'";
+  const fmtDate=sec=>{ if(!sec) return ""; const d=new Date(sec*1000),p=n=>String(n).padStart(2,"0");
+    return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate()); };
+  const fmtSize=b=> b>=1048576?(b/1048576).toFixed(1)+" MB": b>=1024?(b/1024).toFixed(1)+" KB": b+" B";
+
+  // Smoothly expand/collapse the file row when custom is toggled; grey the
+  // auto-Keybox row when custom is on (module never auto-fetches then).
+  function ckSetEnabled(on){
+    ckFileRow.classList.toggle("ck-open",on);
+    if(kbRow) kbRow.classList.toggle("disabled",on);
+  }
+  async function ckRefresh(){
+    const r=await ksuExec(`[ -s "${KEYBOX}" ] && echo "$(wc -c < "${KEYBOX}")|$(stat -c %Y "${KEYBOX}" 2>/dev/null)" || echo "0|"`);
+    const t=(r.stdout||"").trim().split("|");
+    const bytes=parseInt(t[0],10)||0, mtime=parseInt(t[1],10)||0;
+    if(bytes>0){
+      // custom file name if the user picked one, else the auto keybox name
+      // (evokerrkeyNN) — not the generic "keybox.xml".
+      let nm=((await ksuExec(`cat "${KBNAME}" 2>/dev/null`)).stdout||"").trim();
+      if(!nm) nm=metaKeyName||"keybox.xml";
+      ckName.textContent=(T.ck_sel||"Selected keybox:")+" "+nm;
+      ckName.classList.add("ck-sel");
+      ckSize.textContent=fmtSize(bytes)+" · "+fmtDate(mtime);
+      ckDel.hidden=false;
+    } else {
+      ckName.textContent=(T.ck_pick||"Select keybox file");
+      ckName.classList.remove("ck-sel");
+      ckSize.textContent=(T.ck_none||"No file selected");
+      ckDel.hidden=true;
+    }
+  }
+
+  // file manager modal
+  const fm=document.getElementById("fm"), fmList=document.getElementById("fmList");
+  const fmPathEl=document.getElementById("fmPath"), fmSortLbl=document.getElementById("fmSortLbl");
+  const FM_START="/storage/emulated/0";
+  let fmPath=FM_START, fmSort=0, fmItems=[];
+  const SORTS=[
+    {lbl:"A–Z", cmp:(a,b)=>a.name.localeCompare(b.name)},
+    {lbl:"Z–A", cmp:(a,b)=>b.name.localeCompare(a.name)},
+    {lbl:(T.fm_new||"Newest"), cmp:(a,b)=>b.mtime-a.mtime},
+    {lbl:(T.fm_old||"Oldest"), cmp:(a,b)=>a.mtime-b.mtime},
+  ];
+  const DIR_SVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-8l-2-2H4a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1z"/></svg>';
+  const FILE_SVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/></svg>';
+  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+  const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+  // breadcrumb path: clickable segments joined with › (Tricky-Addon style)
+  function fmCrumb(){
+    const parts=fmPath.split("/").filter(Boolean);
+    let acc="";
+    const segs=parts.map(seg=>{ acc+="/"+seg; return `<span class="fm-seg" data-p="${esc(acc)}">${esc(seg)}</span>`; });
+    fmPathEl.innerHTML=segs.length ? segs.join('<span class="fm-sep">›</span>') : '<span class="fm-seg" data-p="/">/</span>';
+    fmPathEl.scrollLeft=fmPathEl.scrollWidth;
+  }
+
+  // One stat call for the whole directory (%F=type %s=size %Y=mtime %n=name) —
+  // ~25x faster than stat-per-file, which was the source of the lag.
+  async function fetchDir(path){
+    const cmd="cd "+shq(path)+" 2>/dev/null && stat -c '%F\t%s\t%Y\t%n' * 2>/dev/null";
+    const r=await ksuExec(cmd);
+    const items=[];
+    (r.stdout||"").split("\n").forEach(l=>{
+      if(!l) return;
+      const p=l.split("\t");
+      if(p.length<4) return;
+      const isDir=p[0]==="directory";
+      if(!isDir && p[0].indexOf("regular")<0) return; // skip symlinks/devices/sockets
+      items.push({dir:isDir, size:parseInt(p[1],10)||0, mtime:parseInt(p[2],10)||0, name:p.slice(3).join("\t")});
+    });
+    return items;
+  }
+  // Build the whole list as one innerHTML string (fast) + event delegation
+  // (one listener on the container, not one per row).
+  function renderDir(items){
+    fmSortLbl.textContent=SORTS[fmSort].lbl;
+    fmCrumb();
+    const dirs=items.filter(i=>i.dir).sort(SORTS[fmSort].cmp);
+    const files=items.filter(i=>!i.dir).sort(SORTS[fmSort].cmp);
+    let html="";
+    if(fmPath!=="/") html+=`<div class="fm-item" data-up="1"><div class="fm-ic dir">${DIR_SVG}</div><div class="fm-info"><div class="fm-nm">..</div></div></div>`;
+    if(!dirs.length && !files.length) html+=`<div class="fm-empty">${esc(T.fm_empty||"Empty folder")}</div>`;
+    for(const it of dirs.concat(files)){
+      const sub=it.dir?fmtDate(it.mtime):fmtSize(it.size)+" · "+fmtDate(it.mtime);
+      html+=`<div class="fm-item" data-dir="${it.dir?1:0}" data-name="${esc(it.name)}"><div class="fm-ic ${it.dir?"dir":""}">${it.dir?DIR_SVG:FILE_SVG}</div><div class="fm-info"><div class="fm-nm">${esc(it.name)}</div><div class="fm-sub">${sub}</div></div></div>`;
+    }
+    fmList.innerHTML=html;
+    fmList.scrollTop=0;
+  }
+  // Navigate: kick off the fetch WHILE the list fades out, so the animation
+  // overlaps the shell call instead of adding to it.
+  async function fmNav(){
+    fmList.classList.add("switching");
+    const pending=fetchDir(fmPath);
+    await sleep(90);
+    fmItems=await pending;
+    renderDir(fmItems);
+    requestAnimationFrame(()=>fmList.classList.remove("switching"));
+  }
+  // Re-sort without hitting the shell again — reorder the cached listing.
+  async function fmResort(){
+    fmList.classList.add("switching");
+    await sleep(90);
+    renderDir(fmItems);
+    requestAnimationFrame(()=>fmList.classList.remove("switching"));
+  }
+  function fmBack(){ if(fmPath==="/") return; fmPath=fmPath.replace(/\/[^/]*$/,"")||"/"; fmNav(); }
+
+  // fmMode: "ck" copies the picked file to keybox.xml (the custom-keybox flow);
+  // "import" copies it into the config dir under its own name and hands the
+  // filename back via fmImportCb (used by the per-app keybox picker).
+  let fmMode="ck", fmImportCb=null;
+  async function fmChoose(path,name){
+    // Import fingerprint (Advanced tab): accept a pif.json (starts with '{') or a
+    // pif.prop (has a FINGERPRINT= line), hand it to import_pif.sh which routes it
+    // through the engine adapter. Separate from the keybox validation below.
+    if(fmMode==="pif"){
+      const first=((await ksuExec("head -c 256 "+shq(path)+" 2>/dev/null | tr -d ' \\t\\r\\n' | cut -c1")).stdout||"").trim();
+      const hasFp=((await ksuExec("grep -q '^FINGERPRINT=' "+shq(path)+" && echo 1 || echo 0")).stdout||"").trim()==="1";
+      if(first!=="{" && !hasFp){ toast(T.imp_none||"Not a pif.json / pif.prop file",4000); fmClose(); return; }
+      fmClose();
+      toast(T.imp_run||"Importing…",0);
+      const r=await ksuExec("sh "+shq(MOD+"/import_pif.sh")+" "+shq(path)+" 2>&1");
+      const out=(r.stdout||r.stderr||"").trim();
+      if(/(^|\n)OK$/.test(out)||out==="OK"||out.endsWith("OK")) toast(T.imp_ok||"Fingerprint imported",4000);
+      else toast((T.imp_bad||"Import failed")+(out?": "+out.replace(/^ERR:\s*/,""):""),6000);
+      await loadStatus();
+      return;
+    }
+    const chk=await ksuExec("head -c 4096 "+shq(path)+" 2>/dev/null | grep -qi -e Keybox -e AndroidAttestation && echo ok || echo bad");
+    if((chk.stdout||"").trim()!=="ok"){
+      if(fmMode!=="import") ckSize.textContent=(T.ck_bad||"Not a valid keybox");
+      fmClose(); return;
+    }
+    if(fmMode==="import"){
+      let fn=name.replace(/[^A-Za-z0-9._-]/g,"_"); if(!/\.xml$/i.test(fn)) fn+=".xml";
+      if(fn.toLowerCase()==="keybox.xml") fn="imported_"+fn;
+      // Record it in .imported_keyboxes so build_target_txt.sh can GC it once
+      // no app references it anymore (manual keyboxes are never listed here, so
+      // they're never auto-deleted).
+      const MAN=CFG+"/.imported_keyboxes";
+      await ksuExec("mkdir -p "+shq(CFG)+" && cp -f "+shq(path)+" "+shq(CFG+"/"+fn)+" && chmod 600 "+shq(CFG+"/"+fn)
+        +" && ( grep -qxF "+shq(fn)+" "+shq(MAN)+" 2>/dev/null || printf '%s\\n' "+shq(fn)+" >> "+shq(MAN)+" )");
+      fmClose(); const cb=fmImportCb; fmImportCb=null; if(cb) cb(fn); return;
+    }
+    await ksuExec("mkdir -p "+shq(CFG)+" && cp -f "+shq(path)+" "+shq(KEYBOX)+" && chmod 600 "+shq(KEYBOX)+" && printf '%s' "+shq(name)+" > "+shq(KBNAME));
+    fmClose(); await ckRefresh();
+  }
+  async function fmOpen(mode){
+    fmMode=(typeof mode==="string")?mode:"ck";
+    if(fmMode==="ck" && !ck.checked) return;
+    fmPath=FM_START; fm.hidden=false; fmList.classList.remove("switching");
+    fmList.innerHTML="";
+    fmItems=await fetchDir(fmPath);
+    renderDir(fmItems);
+  }
+  function fmClose(){ fm.hidden=true; }
+
+  document.getElementById("fmUp").addEventListener("click",fmBack);
+  document.getElementById("fmSort").addEventListener("click",()=>{ fmSort=(fmSort+1)%SORTS.length; fmResort(); });
+  document.getElementById("fmClose").addEventListener("click",fmClose);
+  fmPathEl.addEventListener("click",e=>{ const s=e.target.closest(".fm-seg"); if(s && s.dataset.p!==fmPath){ fmPath=s.dataset.p; fmNav(); }});
+  fm.addEventListener("click",e=>{ if(e.target===fm) fmClose(); });
+  // one delegated click handler for the whole list (no per-row listeners)
+  fmList.addEventListener("click",e=>{
+    const item=e.target.closest(".fm-item"); if(!item) return;
+    if(item.dataset.up){ fmBack(); return; }
+    const name=item.dataset.name;
+    const np=(fmPath==="/"?"":fmPath)+"/"+name;
+    if(item.dataset.dir==="1"){ fmPath=np; fmNav(); } else fmChoose(np,name);
+  });
+
+  ck.checked=await flagPresent(CK_FLAG);
+  ckSetEnabled(ck.checked);
+  await ckRefresh();
+  ck.addEventListener("change",async e=>{
+    await ksuExec(e.target.checked?`mkdir -p "${CFG}" && touch "${CK_FLAG}"`:`rm -f "${CK_FLAG}"`);
+    ckSetEnabled(e.target.checked);
+  });
+  ckPick.addEventListener("click",fmOpen);
+  ckName.addEventListener("click",fmOpen);
+
+  // Advanced tab: import a pif.json / pif.prop fingerprint (issue #17).
+  const impPifRow=document.getElementById("impPifRow");
+  if(impPifRow) impPifRow.addEventListener("click",()=>fmOpen("pif"));
+  ckDel.addEventListener("click",async ()=>{ await ksuExec(`rm -f "${KEYBOX}" "${KBNAME}"`); await ckRefresh(); });
+
+  // ---- per-app keybox + mode (Tricky-Addon-style app list) ----
+  // map value grammar: "off" (untick) | "<kb>|<mode>" where kb is "-" (default
+  // keybox.xml) or a filename, mode is "auto" | "gen" (!) | "hack" (?). No entry
+  // = ticked, default keybox, auto (forced Google trio defaults to gen).
+  (function pak(){
+    const MAP=CFG+"/app_keybox.map";
+    // User-added packages (system apps not in `pm list -3` that still run an
+    // integrity check). One package id per line; merged into the app list.
+    const CUSTOM_PKGS=CFG+"/custom_packages";
+    const PLUS_SVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>';
+    const isPkg=s=>/^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/.test(s);
+    // "Unnecessary" apps — root managers, root tools and general apps that don't
+    // check the bootloader, so they never need to be in the attestation target.
+    // Mirrors Tricky-Addon's more-exclude.json (KOWX712), bundled so there's no
+    // runtime dependency on their repo.
+    const EXCLUDE=new Set(["com.topjohnwu.magisk","io.github.vvb2060.magisk","io.github.huskydg.magisk","me.weishu.kernelsu","com.rifsxd.ksunext","com.sukisu.ultra","me.bmax.apatch","me.garfieldhan.apatch.next","org.lsposed.manager","com.termux","bin.mt.plus","bin.mt.plus.canary","xzr.konabess","io.github.a13e300.ksuwebui","moe.shizuku.privileged.api","com.dergoogler.mmrl","com.dergoogler.mmrl.wx","org.swiftapps.swiftbackup","com.google.android.apps.docs.editors.docs","com.google.android.apps.docs.editors.sheets","com.google.android.apps.docs.editors.slides","com.google.android.apps.maps","com.google.android.apps.translate","com.google.android.apps.youtube.music","com.google.android.keep","com.google.android.youtube","com.google.earth","org.zwanoo.android.speedtest","com.android.chrome"]);
+    const FORCED=new Set(["com.android.vending","com.google.android.gms","com.google.android.gsf"]);
+    const appsEl=document.getElementById("apps"), appsList=document.getElementById("appsList");
+    const appsSearch=document.getElementById("appsSearch");
+    const cfg=document.getElementById("cfg"), cfgIcon=document.getElementById("cfgIcon");
+    const cfgName=document.getElementById("cfgName"), cfgPkgEl=document.getElementById("cfgPkg");
+    const cfgAuto=document.getElementById("cfgAuto"), cfgGen=document.getElementById("cfgGen"), cfgHack=document.getElementById("cfgHack");
+    const cfgKbName=document.getElementById("cfgKbName");
+    const kbp=document.getElementById("kbp"), kbpList=document.getElementById("kbpList");
+    const CHK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>';
+    // Generic app-icon fallback for hosts that don't serve ksu://icon/.
+    const FALLBACK="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a8a8e' stroke-width='1.5'%3E%3Crect x='4' y='4' width='16' height='16' rx='4.5'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E";
+    let apps=[], labels={}, map={}, cfgPkg=null, cfgMode="auto", cfgKb="-", kbpFiles=[], kbpSel="-";
+
+    appsSearch.placeholder=T.pak_search||"Search apps";
+
+    async function loadMap(){
+      const r=await ksuExec(`cat ${shq(MAP)} 2>/dev/null`); map={};
+      (r.stdout||"").split("\n").forEach(l=>{ if(!l) return; const i=l.indexOf("\t"); if(i<1) return; map[l.slice(0,i).trim()]=l.slice(i+1).trim(); });
+    }
+    async function saveMap(){
+      let body=""; Object.keys(map).sort().forEach(p=>{ if(map[p]) body+=p+"\t"+map[p]+"\n"; });
+      // persist the map, then rebuild target.txt so TrickyStore reloads it now
+      await ksuExec(`mkdir -p ${shq(CFG)} && printf %s ${shq(body)} > ${shq(MAP)}; sh ${shq(MOD+"/build_target_txt.sh")} ${shq(CFG+"/target.txt")} >/dev/null 2>&1`);
+    }
+    async function loadApps(){
+      const r=await ksuExec(`{ pm list packages -3; echo com.google.android.gms; echo com.google.android.gsf; echo com.android.vending; cat ${shq(CUSTOM_PKGS)} 2>/dev/null; } 2>/dev/null | sed 's/^package://' | sort -u`);
+      apps=(r.stdout||"").split("\n").map(s=>s.trim()).filter(Boolean);
+      // Real app labels via the KSU WebUI package bridge (WebUI-X / KSUWebUIStandalone).
+      // Synchronous; absent on the basic host — then rows fall back to the package name.
+      labels={};
+      try{
+        if(typeof ksu!=="undefined" && ksu.getPackagesInfo){
+          const info=JSON.parse(ksu.getPackagesInfo(JSON.stringify(apps)));
+          (info||[]).forEach(x=>{ if(x&&x.packageName) labels[x.packageName]=x.appLabel||""; });
+        }
+      }catch(e){}
+    }
+    async function availKeyboxes(){
+      const r=await ksuExec(`ls -1 ${shq(CFG)} 2>/dev/null | grep -i '\\.xml$'`);
+      return (r.stdout||"").split("\n").map(s=>s.trim()).filter(f=>f && f.toLowerCase()!=="keybox.xml");
+    }
+    function specOf(pkg){
+      const v=map[pkg];
+      if(v==="off") return {off:true};
+      if(!v) return {kb:"-", mode:FORCED.has(pkg)?"gen":"auto"};
+      const b=v.split("|"); return {kb:b[0]||"-", mode:b[1]||"auto"};
+    }
+    function chkClass(pkg){
+      const s=specOf(pkg); if(s.off) return "";
+      if(s.mode==="gen") return " on gen";
+      if(s.mode==="hack") return " on hack";
+      return " on";
+    }
+    function badge(pkg){
+      const s=specOf(pkg); if(s.off||!s.kb||s.kb==="-") return "";
+      return `<span class="app-badge">${esc(s.kb.replace(/\.xml$/i,""))}</span>`;
+    }
+    function render(){
+      const qraw=(appsSearch.value||"").trim();
+      const q=qraw.toLowerCase();
+      const list=q?apps.filter(p=>{ const l=labels[p]||""; return p.toLowerCase().includes(q)||l.toLowerCase().includes(q); }):apps;
+      // When the query looks like a package id not already in the list, offer an
+      // "Add custom package" row at the top (Tricky-Addon style). Keep the raw
+      // case — Android package ids may contain uppercase.
+      let addRow="";
+      if(qraw && isPkg(qraw) && !apps.some(p=>p.toLowerCase()===q)){
+        addRow=`<div class="fm-item pak-add" data-add="${esc(qraw)}"><div class="app-icon" style="display:flex;align-items:center;justify-content:center;color:var(--accent)">${PLUS_SVG}</div><div class="fm-info"><div class="app-nm">${esc(T.pak_add||"Add custom package")}</div><div class="app-pkg">${esc(qraw)}</div></div></div>`;
+      }
+      if(!list.length){ appsList.innerHTML=addRow||`<div class="fm-empty">${esc(T.fm_empty||"Empty")}</div>`; return; }
+      let html=addRow; for(const p of list){
+        const lbl=labels[p];
+        const meta=lbl?`<div class="app-nm">${esc(lbl)}</div><div class="app-pkg">${esc(p)}</div>`:`<div class="app-nm">${esc(p)}</div>`;
+        html+=`<div class="fm-item" data-pkg="${esc(p)}"><img class="app-icon" data-pkg="${esc(p)}" alt="" draggable="false"><div class="fm-info">${meta}</div>${badge(p)}<div class="app-chk${chkClass(p)}">${CHK}</div></div>`;
+      }
+      appsList.innerHTML=html;
+      lazyIcons();
+    }
+    // Lazy-load icons only as rows scroll into view (Tricky-Addon does the same;
+    // ksu://icon/ is served by the host, with a graceful fallback glyph).
+    let io=null;
+    function lazyIcons(){
+      if(io) io.disconnect();
+      io=new IntersectionObserver((ents)=>{
+        ents.forEach(en=>{ if(!en.isIntersecting) return; const img=en.target;
+          img.onerror=()=>{ img.onerror=null; img.src=FALLBACK; };
+          img.src="ksu://icon/"+img.dataset.pkg; io.unobserve(img);
+        });
+      },{root:appsList,rootMargin:"150px",threshold:.01});
+      appsList.querySelectorAll(".app-icon").forEach(el=>io.observe(el));
+    }
+
+    async function toggleTick(pkg){
+      if(map[pkg]==="off") delete map[pkg]; else map[pkg]="off";
+      render(); await saveMap();
+    }
+
+    // Add a user-typed package id, persist it, and target it (ticked, auto).
+    async function addCustomPkg(pkg){
+      pkg=(pkg||"").trim();
+      if(!isPkg(pkg)){ toast(T.pak_add_bad||"Enter a valid package name",3000); return; }
+      await ksuExec(`mkdir -p ${shq(CFG)} && ( grep -qxF ${shq(pkg)} ${shq(CUSTOM_PKGS)} 2>/dev/null || printf '%s\\n' ${shq(pkg)} >> ${shq(CUSTOM_PKGS)} )`);
+      if(!apps.some(p=>p.toLowerCase()===pkg.toLowerCase())){ apps.push(pkg); apps.sort(); }
+      delete map[pkg];              // ensure ticked (no "off" entry) = default keybox, auto
+      appsSearch.value=""; render(); await saveMap();
+      toast("+ "+pkg,2500);
+    }
+
+    // ---- long-press: per-app config (mode + keybox) ----
+    function setMode(m){
+      cfgMode=m;
+      [cfgAuto,cfgGen,cfgHack].forEach(b=>{ const on=b.dataset.m===m; b.classList.toggle("on",on); b.setAttribute("aria-pressed",on); });
+    }
+    function updKbName(){ cfgKbName.textContent = cfgKb==="-" ? (T.pak_default||"Default keybox") : cfgKb.replace(/\.xml$/i,""); }
+    function openCfg(pkg){
+      cfgPkg=pkg; const s=specOf(pkg);
+      cfgMode=s.off?"auto":(s.mode||"auto"); cfgKb=(s.off||!s.kb)?"-":s.kb;
+      cfgName.textContent=labels[pkg]||pkg; cfgPkgEl.textContent=pkg;
+      cfgIcon.onerror=()=>{ cfgIcon.onerror=null; cfgIcon.src=FALLBACK; }; cfgIcon.src="ksu://icon/"+pkg;
+      setMode(cfgMode); updKbName();
+      cfg.hidden=false;
+    }
+    async function applyCfg(){
+      // "-" + auto == default, so store nothing (keeps the map minimal); any other
+      // combo becomes "<kb>|<mode>". Applying always ticks the app (clears "off").
+      const spec=(cfgKb==="-" && cfgMode==="auto")?null:(cfgKb+"|"+cfgMode);
+      if(spec) map[cfgPkg]=spec; else delete map[cfgPkg];
+      cfg.hidden=true; render(); await saveMap();
+    }
+
+    // ---- keybox-only picker (opened from the config row) ----
+    // Tapping a row only HIGHLIGHTS it (kbpSel); the selection is committed to
+    // cfgKb by the OK button. Back arrow / backdrop cancels without changing it.
+    function renderKbp(){
+      const row=(v,t,sub)=>`<div class="fm-item${kbpSel===v?" pick":""}" data-v="${esc(v)}"><div class="fm-info"><div class="fm-nm">${esc(t)}</div>${sub?`<div class="fm-sub">${esc(sub)}</div>`:""}</div>${kbpSel===v?`<div class="app-chk on">${CHK}</div>`:""}</div>`;
+      let html=row("-", T.pak_default||"Default keybox", "keybox.xml");
+      for(const f of kbpFiles) html+=row(f, f.replace(/\.xml$/i,""), f);
+      html+=`<div class="fm-item kbp-import" data-v="__import"><div class="fm-info"><div class="fm-nm">${esc(T.pak_import||"Import keybox file…")}</div></div></div>`;
+      kbpList.innerHTML=html;
+    }
+    async function openKbp(){ kbpSel=cfgKb; kbpFiles=await availKeyboxes(); renderKbp(); kbp.hidden=false; }
+    function closeKbp(){ kbp.hidden=true; }
+    function okKbp(){ cfgKb=kbpSel; updKbName(); closeKbp(); }
+
+    async function open(){
+      appsSearch.value=""; appsEl.hidden=false;
+      appsList.innerHTML=`<div class="fm-empty">…</div>`;
+      await loadMap(); await loadApps(); render();
+    }
+
+    document.getElementById("pakRow").addEventListener("click",open);
+    document.getElementById("appsBack").addEventListener("click",()=>{ appsEl.hidden=true; });
+    document.getElementById("appsOk").addEventListener("click",()=>{ appsEl.hidden=true; });
+    appsEl.addEventListener("click",e=>{ if(e.target===appsEl) appsEl.hidden=true; });
+    appsSearch.addEventListener("input",render);
+
+    // ---- kebab menu (top-right): add package / select all / unselect unnecessary ----
+    const appsMenu=document.getElementById("appsMenu"), appsMenuPop=document.getElementById("appsMenuPop");
+    const pkgDlg=document.getElementById("pkgDlg"), pkgInput=document.getElementById("pkgInput");
+    const menuOpen=o=>{ appsMenuPop.hidden=!o; };
+    appsMenu.addEventListener("click",e=>{ e.stopPropagation(); menuOpen(appsMenuPop.hidden); });
+    document.getElementById("pakRow").addEventListener("click",()=>menuOpen(false));   // reset when reopened
+    appsEl.addEventListener("click",()=>menuOpen(false));                               // any dialog click closes it
+    async function selectAll(){
+      apps.forEach(p=>{ if(map[p]==="off") delete map[p]; });
+      render(); await saveMap();
+      toast(T.pak_selall_done||"All apps selected",2000);
+    }
+    async function unselectUnnecessary(){
+      let n=0;
+      apps.forEach(p=>{ if(EXCLUDE.has(p) && !FORCED.has(p) && map[p]!=="off"){ map[p]="off"; n++; } });
+      render(); await saveMap();
+      toast((T.pak_unnec_done||"Unselected unnecessary apps")+(n?" ("+n+")":""),2500);
+    }
+    appsMenuPop.addEventListener("click",e=>{
+      const b=e.target.closest("button[data-act]"); if(!b) return;
+      const act=b.dataset.act; menuOpen(false);
+      if(act==="selall") selectAll();
+      else if(act==="unnec") unselectUnnecessary();
+      else if(act==="add"){ pkgInput.value=""; pkgDlg.hidden=false; setTimeout(()=>pkgInput.focus(),60); }
+    });
+    // add-custom-package dialog
+    const pkgClose=()=>{ pkgDlg.hidden=true; };
+    document.getElementById("pkgCancel").addEventListener("click",pkgClose);
+    pkgDlg.addEventListener("click",e=>{ if(e.target===pkgDlg) pkgClose(); });
+    const pkgSubmit=async()=>{
+      const v=(pkgInput.value||"").trim();
+      if(!isPkg(v)){ toast(T.pak_add_bad||"Enter a valid package name",3000); return; }
+      pkgClose(); await addCustomPkg(v);
+    };
+    document.getElementById("pkgOk").addEventListener("click",pkgSubmit);
+    pkgInput.addEventListener("keydown",e=>{ if(e.key==="Enter") pkgSubmit(); });
+    // "Add custom package" row (not a real app row, so the tap-gesture handlers
+    // below ignore it) — commit it on click.
+    appsList.addEventListener("click",e=>{
+      const add=e.target.closest(".pak-add"); if(add) addCustomPkg(add.dataset.add);
+    });
+
+    // gesture: short tap -> toggle spoof tick; long-press -> per-app config
+    let lpTimer=null, downPkg=null;
+    const pkgOf=e=>{ const it=e.target.closest(".fm-item"); return it?it.dataset.pkg:null; };
+    appsList.addEventListener("pointerdown",e=>{
+      downPkg=pkgOf(e); if(!downPkg) return;
+      lpTimer=setTimeout(()=>{ lpTimer=null; openCfg(downPkg); },420);
+    });
+    const cancelLp=()=>{ if(lpTimer){ clearTimeout(lpTimer); lpTimer=null; } };
+    appsList.addEventListener("pointermove",cancelLp);
+    appsList.addEventListener("pointercancel",cancelLp);
+    appsList.addEventListener("pointerup",e=>{
+      if(!lpTimer) return; clearTimeout(lpTimer); lpTimer=null;
+      const pkg=pkgOf(e); if(pkg && pkg===downPkg) toggleTick(pkg);
+    });
+
+    // config dialog interactions
+    cfgAuto.addEventListener("click",()=>setMode("auto"));
+    cfgGen.addEventListener("click",()=>setMode("gen"));
+    cfgHack.addEventListener("click",()=>setMode("hack"));
+    document.getElementById("cfgKbRow").addEventListener("click",openKbp);
+    document.getElementById("cfgClose").addEventListener("click",()=>{ cfg.hidden=true; });
+    document.getElementById("cfgApply").addEventListener("click",applyCfg);
+    cfg.addEventListener("click",e=>{ if(e.target===cfg) cfg.hidden=true; });
+
+    // keybox picker interactions — tap highlights, OK commits, back/backdrop cancels
+    document.getElementById("kbpBack").addEventListener("click",closeKbp);
+    document.getElementById("kbpOk").addEventListener("click",okKbp);
+    kbp.addEventListener("click",e=>{ if(e.target===kbp) closeKbp(); });
+    kbpList.addEventListener("click",e=>{
+      const it=e.target.closest(".fm-item"); if(!it) return;
+      const v=it.dataset.v;
+      if(v==="__import"){ fmImportCb=async (fn)=>{ kbpFiles=await availKeyboxes(); kbpSel=fn; renderKbp(); }; fmOpen("import"); return; }
+      kbpSel=v; renderKbp();
+    });
+  })();
+}
+init();
+</script>
+
+</body>
+</html>

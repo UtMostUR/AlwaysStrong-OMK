@@ -1,0 +1,127 @@
+#!/system/bin/sh
+# AlwaysStrong — keep the security patch level consistent across:
+#   1. /data/adb/tricky_store/security_patch.txt  — the patch level the
+#      attestation engine stamps into the keystore hardware attestation. If this
+#      is missing or stale the verdict drops to DEVICE even with a good keybox.
+#   2. ro.build.version.security_patch system props — what Build.VERSION and
+#      most app-side patch checks read.
+#
+# Source of truth: the SECURITY_PATCH=YYYY-MM-DD line from the active pif file
+# (produced by autopif4). Falls back to the live system prop if no pif yet.
+#
+# Usage:
+#   sh sync_patch.sh         # write security_patch.txt only (install / action)
+#   sh sync_patch.sh boot    # also resetprop the system props (post-fs-data)
+
+case "$0" in
+    */*) MODPATH=$(cd "${0%/*}" 2>/dev/null && pwd) ;;
+    *)   MODPATH="$PWD" ;;
+esac
+[ -z "$MODPATH" ] && MODPATH="$PWD"
+CONFIG_DIR=/data/adb/tricky_store
+MODE="${1:-}"
+
+# --- find the dotted patch (YYYY-MM-DD) from a pif file -------------------
+SP=""
+SRC=""
+for f in "$CONFIG_DIR/custom.pif.prop" "$CONFIG_DIR/pif.prop" \
+         "$MODPATH/custom.pif.prop" "$MODPATH/pif.prop"; do
+    [ -s "$f" ] || continue
+    SP=$(grep -m1 '^SECURITY_PATCH=' "$f" | cut -d= -f2- | tr -d ' "'\''\r')
+    [ -n "$SP" ] && { SRC="$f"; break; }
+done
+
+# Feed TEESimulator's PatchLevelManager its expected PIF prop at the global
+# path it watches (/data/adb/pif.prop). It auto-derives the attestation patch
+# level + resetprops ro.build.version.security_patch from this file, keeping
+# the keystore attestation in lock-step with the Build/* fingerprint PIF
+# spoofs. (The module-folder path it also checks no longer exists by design.)
+# Only TEESimulator-RS's PatchLevelManager reads this global path. Every other
+# engine — OhMyKeymint included — would just see a stray, world-readable copy of
+# the spoofed pif, so write it only when RS is active and clear any stale copy
+# left from a previous engine.
+if grep -q '^ATTEST=tee$' "$MODPATH/attest.sh" 2>/dev/null; then
+    if [ -n "$SRC" ] && [ "$SRC" != "/data/adb/pif.prop" ]; then
+        cp -f "$SRC" /data/adb/pif.prop 2>/dev/null && chmod 644 /data/adb/pif.prop 2>/dev/null
+    fi
+else
+    rm -f /data/adb/pif.prop 2>/dev/null
+fi
+# fall back to whatever the device already reports
+[ -z "$SP" ] && SP=$(getprop ro.build.version.security_patch 2>/dev/null)
+[ -z "$SP" ] && exit 1
+
+# normalise: RAW = 8 digits, DOT = YYYY-MM-DD, PACKED = YYYYMMDD
+RAW=$(echo "$SP" | tr -cd '0-9')
+[ ${#RAW} -ne 8 ] && exit 1
+PACKED="$RAW"
+DOT="$(echo "$RAW" | cut -c1-4)-$(echo "$RAW" | cut -c5-6)-$(echo "$RAW" | cut -c7-8)"
+
+mkdir -p "$CONFIG_DIR"
+
+# --- 1. attestation patch level (TrickyStore / TEESimulator-RS / OhMyKeymint)
+# `all=<YYYY-MM-DD>` overrides every partition's patch level in the generated
+# attestation chain. Dotted form matches what autopif4 writes and what the
+# working reference module ships, so the two never fight over format.
+NEW_SP="all=$DOT"
+OLD_SP=$(cat "$CONFIG_DIR/security_patch.txt" 2>/dev/null)
+printf '%s\n' "$NEW_SP" > "$CONFIG_DIR/security_patch.txt"
+
+# OMK resolves its patch level from the system props when keymint starts (its
+# config.toml fields stay on "auto" so it follows this same date), so a patch
+# that moved after startup only reaches the attestation on a keymint restart.
+# Bounce it here, and only when it actually moved — the post-fs-data call runs
+# before keymint exists and is skipped by the pidof guard.
+if [ "$OLD_SP" != "$NEW_SP" ] && pidof keymint >/dev/null 2>&1 && \
+   grep -q '^ATTEST=omk$' "$MODPATH/attest.sh" 2>/dev/null; then
+    : > /data/adb/omk/restart.keymint 2>/dev/null
+fi
+
+# --- 2. PIF wildcard prop: spoof ro.build/ro.vendor/ro.system .security_patch
+# A single `*.security_patch=<date>` line makes PIF's zygisk hook report the
+# patch consistently to every app (this is what GMS / Play Integrity reads).
+for pf in "$MODPATH/custom.pif.prop" "$CONFIG_DIR/custom.pif.prop"; do
+    [ -f "$pf" ] || continue
+    if grep -qE '^[#]?\*\.security_patch=' "$pf"; then
+        sed -i "s|^[#]\?\*\.security_patch=.*|*.security_patch=$DOT|" "$pf"
+    else
+        printf '*.security_patch=%s\n' "$DOT" >> "$pf"
+    fi
+done
+
+# --- 3. real system props (boot only — needs resetprop) -------------------
+# What every app that PIF does NOT hook reads: Build.VERSION.SECURITY_PATCH,
+# getprop. Banking apps and attestation checkers compare that against the
+# osPatchLevel in the hardware attestation (security_patch.txt above). If the
+# two differ they flag it — v1.0.4 shipped with this OFF and got exactly that
+# report ("OS patch differs: attestation=202607 prop=2026-05-01", fine on
+# v1.0.3). So the props follow the attested patch by default, ON EVERY BOOT.
+#
+# Two rules keep the earlier complaint ("alters the security patch date and
+# never updates it") from coming back:
+#   - never move a device's patch BACKWARDS: only rewrite when the attested
+#     patch is newer than what the device reports. A stale pif can't paint an
+#     old date, and after an OTA that outruns the fingerprint the real value
+#     stays.
+#   - opt-out for users who want Settings to show the untouched date:
+#       touch /data/adb/tricky_store/no_spoof_patch_props
+#     (the old opt-in file spoof_patch_props still forces it on).
+if [ "$MODE" = "boot" ] && [ ! -f "$CONFIG_DIR/no_spoof_patch_props" ] && \
+   command -v resetprop >/dev/null 2>&1; then
+    FORCE=0; [ -f "$CONFIG_DIR/spoof_patch_props" ] && FORCE=1
+    for p in ro.build.version.security_patch \
+             ro.vendor.build.security_patch \
+             ro.system.build.version.security_patch; do
+        cur=$(resetprop "$p" 2>/dev/null)
+        [ -n "$cur" ] || continue
+        [ "$cur" = "$DOT" ] && continue
+        curp=$(echo "$cur" | tr -cd '0-9')
+        # newer-or-equal real patch: leave it, unless the user forces it
+        if [ "$FORCE" = 0 ] && [ ${#curp} -eq 8 ] && [ "$curp" -ge "$PACKED" ]; then
+            continue
+        fi
+        resetprop -n "$p" "$DOT"
+    done
+fi
+
+echo "$DOT"

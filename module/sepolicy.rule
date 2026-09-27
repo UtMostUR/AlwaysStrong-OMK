@@ -1,0 +1,19 @@
+# AlwaysStrong + OhMyKeymint SELinux policy.
+#
+# Keystore data files: the attestation engine reads the target list / patch level
+# out of /data/adb/tricky_store, which is not a keystore-owned path.
+allow keystore {adb_data_file shell_data_file} file *
+
+# OhMyKeymint: the injected library lives in the module directory (system_file),
+# and keymint's RPC server is reached over a unix_dgram socket. keystore2 needs
+# execute/map/read on the library and the socket permissions in both directions,
+# or the injection silently falls back to the system backend.
+allow keystore system_file unix_dgram_socket { getattr read recvfrom }
+allow system_file keystore unix_dgram_socket sendto
+allow keystore system_file file { execute getattr map read receive }
+
+allow crash_dump keystore process *
+
+# OMK's WebUI / CLI reach the service through service_manager.
+allow keystore default_android_service service_manager find
+allow shell default_android_service service_manager find
