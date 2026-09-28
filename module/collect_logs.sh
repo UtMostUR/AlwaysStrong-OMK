@@ -162,17 +162,23 @@ sec "Spoof overrides + effective flags"
 if [ -s "$CFG/spoof.conf" ]; then
     echo "--- $CFG/spoof.conf"
     cat "$CFG/spoof.conf"
-    # A locked key here is inert — engine.sh refuses to apply it. Say so, so a red
-    # verdict isn't blamed on a spoof.conf line that no longer does anything.
+    # These three drive the verdicts: when on, the PIF zygisk intercepts the
+    # keystore calls the attestation engine answers, the two fight, and all three
+    # Play Integrity verdicts go red. Say so, so a red verdict isn't chased in the
+    # wrong place.
     for _lk in spoofProvider spoofSignature spoofVendingSdk; do
-        grep -q "^${_lk}=" "$CFG/spoof.conf" 2>/dev/null && \
-            echo "note: ${_lk} is locked by the engine — the line above is ignored"
+        _v=$(sed -n "s/^${_lk}=//p" "$CFG/spoof.conf" 2>/dev/null | head -1 | tr -d ' \t\r')
+        case "$_v" in
+            1|true|on|yes)
+                echo "WARN: ${_lk}=${_v} is ON — this fights the attestation engine and turns all three Play Integrity verdicts red" ;;
+        esac
     done
+    echo "inherited-key purge: $([ -f "$CFG/.spoof_keys_purged" ] && echo done || echo pending)"
 else
     echo "no spoof.conf (engine defaults only)"
 fi
-# The flags the zygisk actually reads, module dir first — this is the file whose
-# spoofProvider/spoofSignature/spoofVendingSdk decide the verdict, not spoof.conf.
+# The flags the zygisk actually reads, module dir first — spoof.conf feeds these
+# through engine_enforce_spoof, so this is what the verdicts are decided on.
 for f in "$MODDIR/custom.pif.prop" "$CFG/custom.pif.prop" "$MODDIR/pif.prop" "$CFG/pif.prop"; do
     [ -s "$f" ] && { echo "--- $f (effective spoof flags)"; grep -iE '^(spoof|DEBUG)' "$f"; break; }
 done

@@ -32,12 +32,17 @@ engine_pif_targets() {
 # override in spoof.conf survives — without it a flipped flag would silently
 # revert an hour after boot.
 #
-# Three flags are the exception: they are LOCKED to their default and spoof.conf
-# may not move them. Each makes the PIF zygisk intercept the very keystore calls
-# the attestation engine (OhMyKeymint) answers, so the two fight and Play
-# Integrity goes red on all three verdicts. A spoof.conf carried over from an
-# earlier, non-OMK install is the usual way they get flipped on; the lock
-# neutralises it on the first boot after the update.
+# Three flags are dangerous: spoofProvider / spoofSignature / spoofVendingSdk
+# each make the PIF zygisk intercept the very keystore calls the attestation
+# engine (OhMyKeymint) answers, so the two fight and Play Integrity goes red on
+# all three verdicts. A spoof.conf carried over from an earlier, non-OMK install
+# is the usual way they get left on, and it silently breaks every verdict.
+#
+# They are NOT locked out — an app that genuinely needs one must be able to have
+# it. Instead the engine strips them ONCE from an inherited spoof.conf
+# (engine_migrate_spoof_conf), so an upgrade can't inherit a broken config, and
+# from then on honours whatever the user picks in the WebUI Advanced tab, where
+# those three rows carry a warning about the consequence.
 engine_spoof_defaults() {
     # spoofVendingFinger spoofs the Play Store (Vending) fingerprint. On Android
     # 10–12L (device's REAL sdk ≤ 32) it breaks Play Integrity / GMS instead of
@@ -51,18 +56,33 @@ engine_spoof_defaults() {
     echo "spoofProvider=0 spoofVendingFinger=$_svf spoofBuild=1 spoofProps=1 spoofSignature=0 spoofVendingSdk=0"
 }
 
-# Flags spoof.conf may never override (see the note above).
-engine_locked_keys() {
+# The three keystore-owned flags (see the note above).
+engine_spoof_keystore_keys() {
     echo "spoofProvider spoofSignature spoofVendingSdk"
 }
 
+# One-shot: drop an inherited override for the three keystore flags from
+# spoof.conf, so upgrading from a pre-OMK install can't carry a config that
+# turns all three Play Integrity verdicts red. The marker lives in CONFIG_DIR
+# (which survives module updates), so this runs exactly once; after that the
+# WebUI may set those keys freely and they are honoured.
+engine_migrate_spoof_conf() {
+    _m="$CONFIG_DIR/.spoof_keys_purged"
+    [ -f "$_m" ] && return 0
+    _f="$CONFIG_DIR/spoof.conf"
+    if [ -s "$_f" ] && grep -qE '^(spoofProvider|spoofSignature|spoofVendingSdk)=' "$_f" 2>/dev/null; then
+        grep -vE '^(spoofProvider|spoofSignature|spoofVendingSdk)=' "$_f" > "$_f.tmp" 2>/dev/null
+        mv -f "$_f.tmp" "$_f"
+        [ -s "$_f" ] || rm -f "$_f"
+    fi
+    mkdir -p "$CONFIG_DIR" 2>/dev/null
+    : > "$_m"
+}
+
 # Effective value for a spoof key: the spoof.conf override if present, else the
-# STRONG default passed in $2. A locked key always takes the default.
+# STRONG default passed in $2.
 engine_spoof_val() {
     _k="$1"
-    for _lk in $(engine_locked_keys); do
-        [ "$_k" = "$_lk" ] && { echo "$2"; return; }
-    done
     _ov=$(sed -n "s/^$_k=//p" "$CONFIG_DIR/spoof.conf" 2>/dev/null | head -1 | tr -d ' \t\r')
     [ -n "$_ov" ] && echo "$_ov" || echo "$2"
 }
@@ -111,6 +131,7 @@ engine_autopif() {
 
 # Apply the STRONG flags to every prop file this engine may read.
 engine_enforce_spoof() {
+    engine_migrate_spoof_conf
     _sed=${SED_I:-sed -i}
     for _f in $(engine_pif_targets); do
         [ -f "$_f" ] || continue

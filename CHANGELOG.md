@@ -2,6 +2,30 @@
 
 本仓库为第三方二改版本，版本号沿用上游 AlwaysStrong 的 `v1.0.4` 并加 `-omk` 后缀。
 
+## v1.0.4-omk-r2fix — 2026-09-28
+
+在保持一加等机型三项全红修复的前提下，让三个冲突开关恢复可开启，改为在 WebUI 里
+说明开启后果。
+
+### 变更
+
+- **`spoofProvider` / `spoofSignature` / `spoofVendingSdk` 不再被强制锁定**：
+  r2 里这三个键被引擎忽略、WebUI 开关置灰，用户无法开启。本版改为
+  「升级时一次性清理 + 之后尊重用户选择」：
+  - `engine.sh`：移除 `engine_locked_keys()`；新增 `engine_migrate_spoof_conf()`，
+    在 `engine_enforce_spoof()` 首次运行时，把从旧的非 OMK 安装继承下来的这三个键
+    从 `spoof.conf` 中删除一次（标记 `/data/adb/tricky_store/.spoof_keys_purged`，
+    该目录跨模块更新保留），之后 `spoof.conf` 里的取值一律生效。
+    这样升级不会再继承一份让三项全红的配置，而用户明确开启时仍然可用。
+  - `webroot/index.html`：三个开关恢复为可点；行内加琥珀色警示说明，注明「开启后
+    PlayIntegrityFork 会伪造证明引擎正在应答的 keystore 调用，两者冲突会导致
+    Play Integrity 三项判定全部变红」，开启时再弹一条警示 toast。
+    `spoofwarn` / `spoofwarn_toast` / `spoofwarn_tag` 已加入 en / tr / zh 文案，
+    其余语言回退英文。
+- `collect_logs.sh`：把「键已被锁定、这行无效」的提示改为「该键为开启状态，会与
+  证明引擎冲突导致三项全红」的告警，并报告一次性清理是否已执行。
+- `module.prop`：`version=v1.0.4-omk-r2fix`、`versionCode=10402`。
+
 ## v1.0.4-omk-r2 — 2026-09-28
 
 修复一加等机型上 Play Integrity 三项全红的问题。
