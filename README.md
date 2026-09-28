@@ -78,7 +78,7 @@
 
 ## 环境要求
 
-- **Root 方案**：Magisk / KernelSU / APatch（作者环境为 KernelSU）
+- **Root 方案**：Magisk / KernelSU / APatch
 - **ABI**：仅 **arm64-v8a**。OhMyKeymint 上游只提供 arm64-v8a 载荷，
   其他 ABI 上 `attest/omk.sh` 会直接中止安装。
 - **Android**：建议 Android 13+；Android 17（SDK 37）已修复链接问题。
@@ -89,7 +89,6 @@
 
 | 冲突模块 | 原因 |
 |---|---|
-| 月虹隐藏模块自带的 OMK 守护模块（`yh_omk_guard`） | 两者会抢占同一个 keystore2 注入 |
 | 独立的 OhMyKeymint 模块 | 同上，重复提供 keymint / inject |
 
 本模块自带 `conflict_scan.sh`，检测到上述模块会禁用本模块。**请先卸载它们再刷入。**
@@ -98,7 +97,7 @@
 
 ## 安装
 
-1. 在管理器里卸载已安装的「OhMyKeymint」独立模块与月虹的 OMK 守护模块，**重启一次**。
+1. 在管理器里卸载已安装的「OhMyKeymint」独立模块，**重启一次**。
 2. 刷入本仓库 Release 中的 `AlwaysStrong-<version>.zip`。
 3. 重启设备。
 4. 重启后点模块的 **Action** 按钮查看状态，或打开 WebUI 的 Advanced 页。
