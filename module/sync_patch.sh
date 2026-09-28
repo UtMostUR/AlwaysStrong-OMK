@@ -16,8 +16,12 @@
 # every landing point is written from one computed value, EFF.
 #
 # Which date EFF is:
-#   - default: the fingerprint's SECURITY_PATCH, but never older than the ROM's
-#     own patch (an OTA that outruns the fingerprint keeps the newer real date).
+#   - default: the fingerprint's own SECURITY_PATCH — the pre-r3 behaviour, and
+#     the only combination that is internally consistent for a canary
+#     fingerprint (its patch can never postdate its own build).
+#   - opt-in (/data/adb/tricky_store/unified_patch_date — the WebUI's "Unified
+#     patch date" test row): the newer of the fingerprint's date and the ROM's
+#     real one, so an OTA that outruns the fingerprint keeps the newer real date.
 #   - opt-out (/data/adb/tricky_store/no_spoof_patch_props): the ROM's real date
 #     everywhere — nothing is spoofed on any of the three.
 #
@@ -77,17 +81,19 @@ REAL=$(cat "$CONFIG_DIR/.rom_security_patch" 2>/dev/null | tr -cd '0-9')
 [ ${#REAL} -ne 8 ] && REAL=""
 
 OPTOUT=0; [ -f "$CONFIG_DIR/no_spoof_patch_props" ] && OPTOUT=1
-# FORCE is the WebUI's "Unified patch date" row turned OFF: pin the fingerprint's
-# own date even when the ROM's real patch is newer. That is the pre-r3 behaviour,
-# kept as an experimental A/B probe — not a fix for a Tampered Attestation Key
-# verdict, which is normally a keybox problem.
-FORCE=0;  [ -f "$CONFIG_DIR/spoof_patch_props" ] && FORCE=1
+# UNIFIED is the WebUI's "Unified patch date" row turned ON. It is opt-in and
+# OFF by default, so a fresh install and an upgrade both behave exactly like
+# r2fix: the fingerprint's own date, never the ROM's newer one.
+UNIFIED=0; [ -f "$CONFIG_DIR/unified_patch_date" ] && UNIFIED=1
+# r4 shipped this switch with the opposite polarity (the flag meant "strict").
+# It is gone; drop a stray copy so an upgrade can't carry a dead state around.
+rm -f "$CONFIG_DIR/spoof_patch_props" 2>/dev/null
 
 # --- EFF: the one value every landing point is written from ---------------
 if [ "$OPTOUT" = 1 ]; then
     # user wants the untouched ROM date everywhere
     EFF="$REAL"; [ -z "$EFF" ] && EFF="$PACKED"
-elif [ "$FORCE" = 0 ] && [ -n "$REAL" ] && [ "$REAL" -ge "$PACKED" ]; then
+elif [ "$UNIFIED" = 1 ] && [ -n "$REAL" ] && [ "$REAL" -ge "$PACKED" ]; then
     # never move a device's patch backwards: keep the newer real date
     EFF="$REAL"
 else
@@ -118,13 +124,43 @@ fi
 # --- 2. PIF wildcard prop: spoof ro.build/ro.vendor/ro.system .security_patch
 # A single `*.security_patch=<date>` line makes PIF's zygisk hook report the
 # patch consistently to every app (this is what GMS / Play Integrity reads).
-for pf in "$MODPATH/custom.pif.prop" "$CONFIG_DIR/custom.pif.prop"; do
-    [ -f "$pf" ] || continue
-    if grep -qE '^[#]?\*\.security_patch=' "$pf"; then
-        sed -i "s|^[#]\?\*\.security_patch=.*|*.security_patch=$EFF_DOT|" "$pf"
+#
+# This write is the one that used to fail silently: on some ROMs the bare
+# toybox `sed -i` used here does not modify the file (the same edit through the
+# busybox sed engine.sh prefers does), and nothing noticed while EFF still
+# equalled the fingerprint's own date — migrate.sh had already written that
+# value, so the file looked right either way. The moment the unified date
+# differed, the PIF kept the fingerprint's date while security_patch.txt and the
+# props moved, which is the three-way mismatch that goes red on all three Play
+# Integrity verdicts. So: use the busybox sed, then read the value back, and
+# rebuild the file outright if the edit did not land.
+BB=""
+for _bb in /data/adb/ksu/bin/busybox /data/adb/magisk/busybox /data/adb/ap/bin/busybox \
+           /data/adb/modules/busybox-ndk/system/*/busybox "$(command -v busybox 2>/dev/null)"; do
+    [ -n "$_bb" ] && [ -x "$_bb" ] && BB="$_bb" && break
+done
+SED_I="sed -i"; [ -n "$BB" ] && SED_I="$BB sed -i"
+
+set_pif_patch() {  # set_pif_patch <pif file> <YYYY-MM-DD>
+    _f="$1"; _d="$2"
+    [ -s "$_f" ] || return 0
+    if grep -qE '^[#]?\*\.security_patch=' "$_f"; then
+        $SED_I "s|^[#]\?\*\.security_patch=.*|*.security_patch=$_d|" "$_f" 2>/dev/null
     else
-        printf '*.security_patch=%s\n' "$EFF_DOT" >> "$pf"
+        printf '*.security_patch=%s\n' "$_d" >> "$_f"
     fi
+    [ "$(grep -m1 -E '^\*\.security_patch=' "$_f" | cut -d= -f2- | tr -d ' \r')" = "$_d" ] && return 0
+    # In-place edit didn't take: rewrite the file without an editor. The rest of
+    # the prop (fingerprint, spoof flags) is preserved; only the patch lines are
+    # regenerated. `cat` back over the same inode keeps its mode and context.
+    _t="$_f.tmp.$$"
+    grep -vE '^[#]?\*\.security_patch=' "$_f" > "$_t" 2>/dev/null || cp -f "$_f" "$_t"
+    printf '*.security_patch=%s\n' "$_d" >> "$_t"
+    cat "$_t" > "$_f" 2>/dev/null
+    rm -f "$_t"
+}
+for pf in "$MODPATH/custom.pif.prop" "$CONFIG_DIR/custom.pif.prop"; do
+    set_pif_patch "$pf" "$EFF_DOT"
 done
 
 # --- 3. real system props (boot only — needs resetprop) -------------------

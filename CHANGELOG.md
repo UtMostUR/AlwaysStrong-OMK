@@ -2,6 +2,34 @@
 
 本仓库为第三方二改版本，版本号沿用上游 AlwaysStrong 的 `v1.0.4` 并加 `-omk` 后缀。
 
+## v1.0.4-omk-r5 — 2026-09-29
+
+修正 r4 实验性开关的默认状态与说明，并修掉开关开启时 PIF 补丁日期写不进去的缺陷。
+
+### 修复
+
+- **开关开启时 Play Integrity 三项全红**：`sync_patch.sh` 写 pif 的 `*.security_patch`
+  用的是裸 `toybox sed -i`，部分 ROM 上这条编辑静默不生效。默认模式下 `EFF` 恰好等于
+  指纹自带日期，`migrate.sh` 早已写过同一个值，所以文件看起来是对的；一旦「统一日期」
+  把 `EFF` 抬到 ROM 的真实补丁，pif 仍停在指纹日期，而 `security_patch.txt` 与系统属性
+  已经跟着走了 —— 日志里就是这种三处不一致（`security_patch.txt` 2026-09-01、
+  `pif *.security_patch` 2026-08-05、属性 2026-09-01），三项判定因此全红。
+  - 改为优先使用 busybox `sed`，写完立刻回读校验，读回不等于目标值就整文件重建
+    （`grep -v` 过滤旧行 + 追加新行 + `cat` 回写同一 inode，保留权限与 SELinux 上下文），
+    不再依赖某个 sed 实现是否支持就地编辑。
+- **开关默认状态**：r4 里该开关是「开（默认）」，与用户预期相反。现在默认关闭 ——
+  全新安装与升级都等同 r2fix 的行为：三处一律用指纹自带日期。标志文件也从
+  `spoof_patch_props`（r4 的「严格」语义）改名 `unified_patch_date`（现在的「统一」语义），
+  并在 `sync_patch.sh` 里清掉可能残留的旧标志，避免升级继承一个已失效的状态。
+
+### 变更
+
+- `webroot/index.html`：「统一日期策略（测试）」的说明改为明确指向
+  **Tampered Attestation Key 26** 这一项，并标注关闭为默认值；en / tr / zh 三份文案同步。
+- `collect_logs.sh`：`date mode:` 一行改为按 `unified_patch_date` 判断，直接打印
+  「strict fingerprint, own date (default)」或「unified, newest of fingerprint/ROM (experimental toggle ON)」。
+- `module.prop`：`version=v1.0.4-omk-r5`、`versionCode=10405`。
+
 ## v1.0.4-omk-r4 — 2026-09-29
 
 把 r3 的日期策略做成 WebUI 上的实验性开关，供排查「Tampered Attestation Key」用。
