@@ -58,8 +58,7 @@
 - `module.prop`：`version=v1.0.4-omk`、`versionCode=10400`，
   描述改为 `OhMyKeymint + PlayIntegrityFork`，作者列表补充 James Clef、qwq233。
 - 移除 `updateJson`（不提供在线更新）。
-- `conflict_scan.sh`：检测到月虹 OMK 守护模块（`yh_omk_guard`）或独立 OhMyKeymint
-  模块时禁用本模块。
+- `conflict_scan.sh`：检测到独立 OhMyKeymint 模块时禁用本模块。
 - SELinux 规则取「AlwaysStrong 原规则 ∪ 上游 OMK 规则」，未引入 TCP 调试面。
 
 ### 保留
@@ -73,6 +72,6 @@
 ### 已知限制
 
 - 仅支持 **arm64-v8a**（OhMyKeymint 上游只提供 arm64-v8a 载荷）。
-- 不能与月虹 OMK 守护模块（`yh_omk_guard`）或独立 OhMyKeymint 模块同时安装。
+- 不能与独立 OhMyKeymint 模块同时安装。
 - 从其他 OMK 引擎切换过来的**首次开机**，旧密钥 blob 可能无法解密，
   自愈逻辑会重建私有存储；此时旧应用密钥失效属预期行为。
