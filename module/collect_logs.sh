@@ -188,6 +188,7 @@ sec "Security patch consistency"
 # have to agree, or an attestation checker flags "OS patch differs". Print all
 # three plus the ROM's captured real date, and name any mismatch outright.
 echo "patch spoof: $([ -f "$CFG/no_spoof_patch_props" ] && echo "off (ROM real date everywhere)" || echo on)"
+echo "date mode: $([ -f "$CFG/spoof_patch_props" ] && echo "strict fingerprint (experimental toggle OFF)" || echo "unified, newest of fingerprint/ROM (default)")"
 echo "ROM real (captured at boot): $(cat "$CFG/.rom_security_patch" 2>/dev/null | tr -cd '0-9')"
 _sp=$(cat "$CFG/security_patch.txt" 2>/dev/null | sed 's/^all=//' | tr -d ' \r')
 echo "security_patch.txt: ${_sp:-missing}"

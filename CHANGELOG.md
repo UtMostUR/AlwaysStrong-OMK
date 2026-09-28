@@ -2,6 +2,36 @@
 
 本仓库为第三方二改版本，版本号沿用上游 AlwaysStrong 的 `v1.0.4` 并加 `-omk` 后缀。
 
+## v1.0.4-omk-r4 — 2026-09-29
+
+把 r3 的日期策略做成 WebUI 上的实验性开关，供排查「Tampered Attestation Key」用。
+
+### 新增
+
+- `webroot/index.html`：Advanced 页新增「统一日期策略（测试）」一行（琥珀色警示样式 +
+  `测试` 角标），位于「Spoof security patch」下方：
+  - **开（默认）** = r3 逻辑：三处日期取「指纹补丁」与「ROM 真实补丁」中较新的一个；
+  - **关** = 严格使用指纹自带日期，忽略 ROM 更新的真实补丁 —— 即 r3 之前的行为。
+  - 切换后立即调用 `sync_patch.sh boot` 生效，无需重启。
+  - 行内注明这是实验性排查项，并明确「Tampered Attestation Key 通常与 keybox 有关，
+    本项未必有效」。
+  - 文案进 en / tr / zh，其余语言回退英文。
+- 底层复用 `sync_patch.sh` 既有的 `spoof_patch_props` 强制分支（`FORCE=1`），
+  WebUI 开关关闭时创建该文件，打开时删除。
+
+### 变更
+
+- `collect_logs.sh`：日期一致性段新增 `date mode:` 一行，打印当前用的是统一日期还是
+  严格指纹日期。
+- `sync_patch.sh`：为 `FORCE` 分支补充说明注释（它是 WebUI 该开关的落地）。
+- `module.prop`：`version=v1.0.4-omk-r4`、`versionCode=10404`。
+
+### 说明
+
+`Tampered Attestation Key` 指证明密钥被判定为篡改，绝大多数情况是 keybox 被 Google
+判定为共享滥用或证书链不合法，与安全补丁日期无关。本开关是给用户做 A/B 排查用的
+逃生口，不是该报错的修复项。
+
 ## v1.0.4-omk-r3 — 2026-09-29
 
 修复安全补丁日期「被自动改写」与「三处日期互相不一致」两个问题。

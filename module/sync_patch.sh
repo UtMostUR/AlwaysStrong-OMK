@@ -77,6 +77,10 @@ REAL=$(cat "$CONFIG_DIR/.rom_security_patch" 2>/dev/null | tr -cd '0-9')
 [ ${#REAL} -ne 8 ] && REAL=""
 
 OPTOUT=0; [ -f "$CONFIG_DIR/no_spoof_patch_props" ] && OPTOUT=1
+# FORCE is the WebUI's "Unified patch date" row turned OFF: pin the fingerprint's
+# own date even when the ROM's real patch is newer. That is the pre-r3 behaviour,
+# kept as an experimental A/B probe — not a fix for a Tampered Attestation Key
+# verdict, which is normally a keybox problem.
 FORCE=0;  [ -f "$CONFIG_DIR/spoof_patch_props" ] && FORCE=1
 
 # --- EFF: the one value every landing point is written from ---------------
