@@ -89,7 +89,7 @@
 
 | 冲突模块 | 原因 |
 |---|---|
-| 独立的 OhMyKeymint 模块 | 同上，重复提供 keymint / inject |
+| 独立的 OhMyKeymint 模块 | 重复提供 keymint / inject |
 
 本模块自带 `conflict_scan.sh`，检测到上述模块会禁用本模块。**请先卸载它们再刷入。**
 
