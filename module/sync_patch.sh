@@ -1,17 +1,32 @@
 #!/system/bin/sh
-# AlwaysStrong — keep the security patch level consistent across:
-#   1. /data/adb/tricky_store/security_patch.txt  — the patch level the
-#      attestation engine stamps into the keystore hardware attestation. If this
-#      is missing or stale the verdict drops to DEVICE even with a good keybox.
-#   2. ro.build.version.security_patch system props — what Build.VERSION and
-#      most app-side patch checks read.
+# AlwaysStrong — keep the security patch level consistent across three places:
+#   1. /data/adb/tricky_store/security_patch.txt  — the patch level a
+#      TrickyStore-style engine stamps into the hardware attestation.
+#   2. *.security_patch in the active pif file    — what PIF's zygisk reports to
+#      GMS and to every app it hooks.
+#   3. ro.build.version.security_patch system props — what Build.VERSION and the
+#      apps PIF does NOT hook read. OhMyKeymint's config.toml keeps its patch
+#      fields on "auto", so the engine's attestation follows these props too.
 #
-# Source of truth: the SECURITY_PATCH=YYYY-MM-DD line from the active pif file
-# (produced by autopif4). Falls back to the live system prop if no pif yet.
+# All three must carry the SAME date: attestation checkers flag a mismatch
+# between the OS patch (props) and the attested osPatchLevel (security_patch.txt
+# / the engine). Earlier versions could drift apart two ways — the hourly
+# refresh only rewrote security_patch.txt, and turning patch spoofing off moved
+# the props to the real date while the other two stayed spoofed. Both are gone:
+# every landing point is written from one computed value, EFF.
+#
+# Which date EFF is:
+#   - default: the fingerprint's SECURITY_PATCH, but never older than the ROM's
+#     own patch (an OTA that outruns the fingerprint keeps the newer real date).
+#   - opt-out (/data/adb/tricky_store/no_spoof_patch_props): the ROM's real date
+#     everywhere — nothing is spoofed on any of the three.
+#
+# The ROM's real patch is captured by post-fs-data.sh before anything pins the
+# props, into $CONFIG_DIR/.rom_security_patch.
 #
 # Usage:
-#   sh sync_patch.sh         # write security_patch.txt only (install / action)
-#   sh sync_patch.sh boot    # also resetprop the system props (post-fs-data)
+#   sh sync_patch.sh         # security_patch.txt + pif only (install / hourly)
+#   sh sync_patch.sh boot    # also pin the system props (post-fs-data / Action)
 
 case "$0" in
     */*) MODPATH=$(cd "${0%/*}" 2>/dev/null && pwd) ;;
@@ -51,11 +66,30 @@ fi
 [ -z "$SP" ] && SP=$(getprop ro.build.version.security_patch 2>/dev/null)
 [ -z "$SP" ] && exit 1
 
-# normalise: RAW = 8 digits, DOT = YYYY-MM-DD, PACKED = YYYYMMDD
+# normalise: RAW = 8 digits, PACKED = YYYYMMDD, DOT = YYYY-MM-DD
 RAW=$(echo "$SP" | tr -cd '0-9')
 [ ${#RAW} -ne 8 ] && exit 1
 PACKED="$RAW"
 DOT="$(echo "$RAW" | cut -c1-4)-$(echo "$RAW" | cut -c5-6)-$(echo "$RAW" | cut -c7-8)"
+
+# --- the ROM's own patch level (captured before the props were ever pinned) --
+REAL=$(cat "$CONFIG_DIR/.rom_security_patch" 2>/dev/null | tr -cd '0-9')
+[ ${#REAL} -ne 8 ] && REAL=""
+
+OPTOUT=0; [ -f "$CONFIG_DIR/no_spoof_patch_props" ] && OPTOUT=1
+FORCE=0;  [ -f "$CONFIG_DIR/spoof_patch_props" ] && FORCE=1
+
+# --- EFF: the one value every landing point is written from ---------------
+if [ "$OPTOUT" = 1 ]; then
+    # user wants the untouched ROM date everywhere
+    EFF="$REAL"; [ -z "$EFF" ] && EFF="$PACKED"
+elif [ "$FORCE" = 0 ] && [ -n "$REAL" ] && [ "$REAL" -ge "$PACKED" ]; then
+    # never move a device's patch backwards: keep the newer real date
+    EFF="$REAL"
+else
+    EFF="$PACKED"
+fi
+EFF_DOT="$(echo "$EFF" | cut -c1-4)-$(echo "$EFF" | cut -c5-6)-$(echo "$EFF" | cut -c7-8)"
 
 mkdir -p "$CONFIG_DIR"
 
@@ -63,7 +97,7 @@ mkdir -p "$CONFIG_DIR"
 # `all=<YYYY-MM-DD>` overrides every partition's patch level in the generated
 # attestation chain. Dotted form matches what autopif4 writes and what the
 # working reference module ships, so the two never fight over format.
-NEW_SP="all=$DOT"
+NEW_SP="all=$EFF_DOT"
 OLD_SP=$(cat "$CONFIG_DIR/security_patch.txt" 2>/dev/null)
 printf '%s\n' "$NEW_SP" > "$CONFIG_DIR/security_patch.txt"
 
@@ -83,45 +117,33 @@ fi
 for pf in "$MODPATH/custom.pif.prop" "$CONFIG_DIR/custom.pif.prop"; do
     [ -f "$pf" ] || continue
     if grep -qE '^[#]?\*\.security_patch=' "$pf"; then
-        sed -i "s|^[#]\?\*\.security_patch=.*|*.security_patch=$DOT|" "$pf"
+        sed -i "s|^[#]\?\*\.security_patch=.*|*.security_patch=$EFF_DOT|" "$pf"
     else
-        printf '*.security_patch=%s\n' "$DOT" >> "$pf"
+        printf '*.security_patch=%s\n' "$EFF_DOT" >> "$pf"
     fi
 done
 
 # --- 3. real system props (boot only — needs resetprop) -------------------
 # What every app that PIF does NOT hook reads: Build.VERSION.SECURITY_PATCH,
 # getprop. Banking apps and attestation checkers compare that against the
-# osPatchLevel in the hardware attestation (security_patch.txt above). If the
-# two differ they flag it — v1.0.4 shipped with this OFF and got exactly that
-# report ("OS patch differs: attestation=202607 prop=2026-05-01", fine on
-# v1.0.3). So the props follow the attested patch by default, ON EVERY BOOT.
-#
-# Two rules keep the earlier complaint ("alters the security patch date and
-# never updates it") from coming back:
-#   - never move a device's patch BACKWARDS: only rewrite when the attested
-#     patch is newer than what the device reports. A stale pif can't paint an
-#     old date, and after an OTA that outruns the fingerprint the real value
-#     stays.
-#   - opt-out for users who want Settings to show the untouched date:
-#       touch /data/adb/tricky_store/no_spoof_patch_props
-#     (the old opt-in file spoof_patch_props still forces it on).
-if [ "$MODE" = "boot" ] && [ ! -f "$CONFIG_DIR/no_spoof_patch_props" ] && \
-   command -v resetprop >/dev/null 2>&1; then
-    FORCE=0; [ -f "$CONFIG_DIR/spoof_patch_props" ] && FORCE=1
-    for p in ro.build.version.security_patch \
-             ro.vendor.build.security_patch \
-             ro.system.build.version.security_patch; do
-        cur=$(resetprop "$p" 2>/dev/null)
-        [ -n "$cur" ] || continue
-        [ "$cur" = "$DOT" ] && continue
-        curp=$(echo "$cur" | tr -cd '0-9')
-        # newer-or-equal real patch: leave it, unless the user forces it
-        if [ "$FORCE" = 0 ] && [ ${#curp} -eq 8 ] && [ "$curp" -ge "$PACKED" ]; then
-            continue
-        fi
-        resetprop -n "$p" "$DOT"
-    done
+# osPatchLevel in the hardware attestation (security_patch.txt above) and flag a
+# mismatch. EFF is already the newer of {fingerprint patch, ROM patch}, so this
+# is idempotent: on a default boot it pins the spoofed date, and with the
+# opt-out set it restores the ROM's real date.
+if [ "$MODE" = "boot" ] && command -v resetprop >/dev/null 2>&1; then
+    if [ "$OPTOUT" = 1 ] && [ -z "$REAL" ]; then
+        # opted out but the ROM date was never captured — nothing safe to write
+        :   # leave the props alone; the next boot captures it
+    else
+        for p in ro.build.version.security_patch \
+                 ro.vendor.build.security_patch \
+                 ro.system.build.version.security_patch; do
+            cur=$(resetprop "$p" 2>/dev/null)
+            [ -n "$cur" ] || continue
+            [ "$cur" = "$EFF_DOT" ] && continue
+            resetprop -n "$p" "$EFF_DOT"
+        done
+    fi
 fi
 
-echo "$DOT"
+echo "$EFF_DOT"

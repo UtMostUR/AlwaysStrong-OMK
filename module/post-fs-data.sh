@@ -23,6 +23,19 @@ MODPATH="${0%/*}"
 # keep off. Leave the user's DenyList state exactly as they set it.
 
 # --- Security patch level (attestation + Build consistency) ---------------
+# Record the ROM's own patch level first. This runs before anything pins the
+# props, so resetprop still reports the untouched value here — every boot, and
+# it tracks an OTA automatically. sync_patch.sh uses it as the floor (never move
+# a device's patch backwards) and as the date to fall back to when the user opts
+# out of patch spoofing.
+_ROMSP=$(resetprop ro.build.version.security_patch 2>/dev/null)
+[ -z "$_ROMSP" ] && _ROMSP=$(getprop ro.build.version.security_patch 2>/dev/null)
+_ROMP=$(echo "$_ROMSP" | tr -cd '0-9')
+if [ ${#_ROMP} -eq 8 ]; then
+    mkdir -p /data/adb/tricky_store 2>/dev/null
+    printf '%s\n' "$_ROMP" > /data/adb/tricky_store/.rom_security_patch 2>/dev/null
+fi
+
 # Writes /data/adb/tricky_store/security_patch.txt for the TEE attestation and
 # pins ro.build.version.security_patch to match the spoofed fingerprint.
 [ -f "$MODPATH/sync_patch.sh" ] && sh "$MODPATH/sync_patch.sh" boot 2>/dev/null

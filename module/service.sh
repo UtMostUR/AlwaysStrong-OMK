@@ -354,6 +354,11 @@ fi
 # WebUI writes flag files into /data/adb/tricky_store/ to opt OUT:
 #   no_auto_fp      -> skip the fingerprint refresh
 #   no_auto_keybox  -> skip the keybox fetch
+# The patch refresh runs in boot mode so a fingerprint that moved the security
+# patch re-pins the system props too, not just security_patch.txt — otherwise the
+# props kept the old date until the next reboot and the OS-patch / osPatchLevel
+# check flagged a mismatch. sync_patch.sh is idempotent, so this is a no-op on
+# the hours where nothing moved.
 # Keybox-only restarts PI when it actually changed (exit 0); fingerprint
 # updates are picked up naturally on the next PI invocation, so we don't
 # kick running banking apps for cosmetic refreshes.
@@ -378,7 +383,7 @@ fi
             if [ "$FP_DONE" = 0 ]; then
                 engine_autopif 2>&1 | log -t "AlwaysStrong-hourly"
             fi
-            [ -f "$MODDIR/sync_patch.sh" ] && sh "$MODDIR/sync_patch.sh" 2>&1 | log -t "AlwaysStrong-hourly"
+            [ -f "$MODDIR/sync_patch.sh" ] && sh "$MODDIR/sync_patch.sh" boot 2>&1 | log -t "AlwaysStrong-hourly"
             # upstream's fetcher resets these to a WEAK config (Fork's
             # migrate.sh writes spoofProvider=1 / spoofVendingFinger=0), which
             # would silently drop the verdict an hour after boot.

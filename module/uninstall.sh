@@ -35,6 +35,9 @@ done
 rm -rf "$CONFIG_DIR/persistent_keys"
 rm -f "$CONFIG_DIR/tee_status.txt"
 rm -f "$CONFIG_DIR/boot_hash.bin" "$CONFIG_DIR/boot_key.bin"
+# ROM real patch cache captured by post-fs-data.sh — pure cache, rebuilt on the
+# next install/boot.
+rm -f "$CONFIG_DIR/.rom_security_patch"
 
 # Global PIF prop we dropped for the TEE PatchLevelManager (sync_patch.sh)
 rm -f /data/adb/pif.prop

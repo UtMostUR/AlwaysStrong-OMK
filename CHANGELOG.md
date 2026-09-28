@@ -2,6 +2,42 @@
 
 本仓库为第三方二改版本，版本号沿用上游 AlwaysStrong 的 `v1.0.4` 并加 `-omk` 后缀。
 
+## v1.0.4-omk-r3 — 2026-09-29
+
+修复安全补丁日期「被自动改写」与「三处日期互相不一致」两个问题。
+
+### 修复
+
+- **三处日期统一为一个值**：安全补丁日期此前分散在三处 —— 系统属性
+  `ro.build.version.security_patch`、`/data/adb/tricky_store/security_patch.txt`
+  （引擎写进硬件证明的 osPatchLevel）、以及 pif 的 `*.security_patch`（PIF 的
+  zygisk 报给 GMS 的日期）。OhMyKeymint 的 `config.toml` 补丁字段保持 `auto`，
+  所以引擎证明最终也跟随系统属性。三者必须一致，否则证明校验会报
+  「OS patch 与 osPatchLevel 不符」。
+  - `sync_patch.sh`：改为先算出一个统一日期 `EFF`，三处全部由它写入。
+    - 默认：取指纹的 `SECURITY_PATCH`，但不早于 ROM 自身补丁 —— 即
+      「只前进不后退」，OTA 跑在指纹前面时保留更新的真实日期。
+    - 关闭补丁伪装（`no_spoof_patch_props`）：三处一律使用 ROM 真实日期，
+      不再出现「属性回到真实、另外两处还在伪装」的错位。
+  - `post-fs-data.sh`：在任何地方改写属性之前，先把 ROM 真实补丁记录到
+    `/data/adb/tricky_store/.rom_security_patch`（每次开机刷新，自动跟随 OTA），
+    供上面的「下限」与「真实日期」使用。
+- **每小时刷新只改一半**：`service.sh` 的小时任务此前以非 boot 模式调用
+  `sync_patch.sh`，只更新 `security_patch.txt`，系统属性要等下次重启才跟上，
+  期间就会出现属性与证明日期不一致。现在小时任务同样以 boot 模式运行，
+  属性随指纹一起重钉；`sync_patch.sh` 幂等，未变动的小时是空操作。
+
+### 变更
+
+- `webroot/index.html`：`spp`（Spoof security patch）开关说明改为「三处日期统一
+  为一个值，关闭时三处都使用 ROM 真实日期」；切换时立即生效（开启与关闭都会
+  立刻调用 `sync_patch.sh boot`），不再需要重启才生效。
+- `collect_logs.sh`：新增「Security patch consistency」段，打印开关状态、
+  ROM 真实日期、`security_patch.txt`、pif `*.security_patch` 与系统属性，
+  不一致时直接给出 WARN。
+- `uninstall.sh`：清理 `.rom_security_patch` 缓存。
+- `module.prop`：`version=v1.0.4-omk-r3`、`versionCode=10403`。
+
 ## v1.0.4-omk-r2fix — 2026-09-28
 
 在保持一加等机型三项全红修复的前提下，让三个冲突开关恢复可开启，改为在 WebUI 里

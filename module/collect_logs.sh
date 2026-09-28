@@ -183,6 +183,28 @@ for f in "$MODDIR/custom.pif.prop" "$CFG/custom.pif.prop" "$MODDIR/pif.prop" "$C
     [ -s "$f" ] && { echo "--- $f (effective spoof flags)"; grep -iE '^(spoof|DEBUG)' "$f"; break; }
 done
 
+sec "Security patch consistency"
+# The OS patch prop, the attested patch (security_patch.txt) and the PIF date all
+# have to agree, or an attestation checker flags "OS patch differs". Print all
+# three plus the ROM's captured real date, and name any mismatch outright.
+echo "patch spoof: $([ -f "$CFG/no_spoof_patch_props" ] && echo "off (ROM real date everywhere)" || echo on)"
+echo "ROM real (captured at boot): $(cat "$CFG/.rom_security_patch" 2>/dev/null | tr -cd '0-9')"
+_sp=$(cat "$CFG/security_patch.txt" 2>/dev/null | sed 's/^all=//' | tr -d ' \r')
+echo "security_patch.txt: ${_sp:-missing}"
+_pifsp=""
+for f in "$CFG/custom.pif.prop" "$MODDIR/custom.pif.prop" "$CFG/pif.prop" "$MODDIR/pif.prop"; do
+    [ -s "$f" ] || continue
+    _pifsp=$(grep -m1 '^[#]\?\*\.security_patch=' "$f" 2>/dev/null | cut -d= -f2- | tr -d ' \r')
+    [ -n "$_pifsp" ] && { echo "pif *.security_patch: $_pifsp  ($f)"; break; }
+done
+_pr=$(getprop ro.build.version.security_patch 2>/dev/null)
+echo "ro.build.version.security_patch: ${_pr:-unset}"
+echo "ro.vendor.build.security_patch: $(getprop ro.vendor.build.security_patch 2>/dev/null)"
+[ -n "$_sp" ] && [ -n "$_pr" ] && [ "$_sp" != "$_pr" ] && \
+    echo "WARN: security_patch.txt ($_sp) != ro.build.version.security_patch ($_pr) — OS-patch / osPatchLevel mismatch, checkers flag this"
+[ -n "$_sp" ] && [ -n "$_pifsp" ] && [ "$_sp" != "$_pifsp" ] && \
+    echo "WARN: security_patch.txt ($_sp) != pif *.security_patch ($_pifsp) — PIF and the engine report different patch dates"
+
 sec "Keybox (metadata only — contents withheld)"
 KB="$CFG/keybox.xml"
 if [ -s "$KB" ]; then
