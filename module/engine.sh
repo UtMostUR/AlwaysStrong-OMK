@@ -31,6 +31,13 @@ engine_pif_targets() {
 # Pro). engine_enforce_spoof re-applies these on every boot/hourly pass, so an
 # override in spoof.conf survives — without it a flipped flag would silently
 # revert an hour after boot.
+#
+# Three flags are the exception: they are LOCKED to their default and spoof.conf
+# may not move them. Each makes the PIF zygisk intercept the very keystore calls
+# the attestation engine (OhMyKeymint) answers, so the two fight and Play
+# Integrity goes red on all three verdicts. A spoof.conf carried over from an
+# earlier, non-OMK install is the usual way they get flipped on; the lock
+# neutralises it on the first boot after the update.
 engine_spoof_defaults() {
     # spoofVendingFinger spoofs the Play Store (Vending) fingerprint. On Android
     # 10–12L (device's REAL sdk ≤ 32) it breaks Play Integrity / GMS instead of
@@ -44,10 +51,19 @@ engine_spoof_defaults() {
     echo "spoofProvider=0 spoofVendingFinger=$_svf spoofBuild=1 spoofProps=1 spoofSignature=0 spoofVendingSdk=0"
 }
 
+# Flags spoof.conf may never override (see the note above).
+engine_locked_keys() {
+    echo "spoofProvider spoofSignature spoofVendingSdk"
+}
+
 # Effective value for a spoof key: the spoof.conf override if present, else the
-# STRONG default passed in $2.
+# STRONG default passed in $2. A locked key always takes the default.
 engine_spoof_val() {
-    _ov=$(sed -n "s/^$1=//p" "$CONFIG_DIR/spoof.conf" 2>/dev/null | head -1 | tr -d ' \t\r')
+    _k="$1"
+    for _lk in $(engine_locked_keys); do
+        [ "$_k" = "$_lk" ] && { echo "$2"; return; }
+    done
+    _ov=$(sed -n "s/^$_k=//p" "$CONFIG_DIR/spoof.conf" 2>/dev/null | head -1 | tr -d ' \t\r')
     [ -n "$_ov" ] && echo "$_ov" || echo "$2"
 }
 

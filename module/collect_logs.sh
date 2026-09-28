@@ -158,6 +158,25 @@ for f in "$CFG/pif.prop" "$MODDIR/pif.prop" "$MODDIR/custom.pif.prop"; do
     [ -s "$f" ] && { echo "--- $f"; cat "$f"; break; }
 done
 
+sec "Spoof overrides + effective flags"
+if [ -s "$CFG/spoof.conf" ]; then
+    echo "--- $CFG/spoof.conf"
+    cat "$CFG/spoof.conf"
+    # A locked key here is inert — engine.sh refuses to apply it. Say so, so a red
+    # verdict isn't blamed on a spoof.conf line that no longer does anything.
+    for _lk in spoofProvider spoofSignature spoofVendingSdk; do
+        grep -q "^${_lk}=" "$CFG/spoof.conf" 2>/dev/null && \
+            echo "note: ${_lk} is locked by the engine — the line above is ignored"
+    done
+else
+    echo "no spoof.conf (engine defaults only)"
+fi
+# The flags the zygisk actually reads, module dir first — this is the file whose
+# spoofProvider/spoofSignature/spoofVendingSdk decide the verdict, not spoof.conf.
+for f in "$MODDIR/custom.pif.prop" "$CFG/custom.pif.prop" "$MODDIR/pif.prop" "$CFG/pif.prop"; do
+    [ -s "$f" ] && { echo "--- $f (effective spoof flags)"; grep -iE '^(spoof|DEBUG)' "$f"; break; }
+done
+
 sec "Keybox (metadata only — contents withheld)"
 KB="$CFG/keybox.xml"
 if [ -s "$KB" ]; then

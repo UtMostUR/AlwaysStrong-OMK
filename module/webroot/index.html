@@ -273,6 +273,8 @@ h1{
 .adv-note{color:var(--muted);font-size:12px;line-height:1.5;margin:2px 6px 0 14px}
 .spoofvar-t{font:600 14.5px/1.25 ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;letter-spacing:-.01em}
 #spoofVars .row{min-height:52px}
+#spoofVars .row.locked{opacity:.55}
+.lock-tag{font:600 10px/1 ui-monospace,monospace;color:var(--muted);border:1px solid var(--muted);border-radius:6px;padding:2px 5px;margin-left:7px;vertical-align:1px;text-transform:uppercase;letter-spacing:.04em}
 #spoofVars .fm-empty{padding:22px 16px}
 
 /* ---------------- footer ---------------- */
@@ -954,6 +956,11 @@ async function init(){
     inject:["spoofBuild","spoofProps","spoofProvider","spoofSignature","spoofVendingBuild","spoofVendingSdk","DEBUG"]
   };
   const FLAG_ON={spoofVendingFinger:1,spoofBuild:1,spoofProps:1,spoofVendingBuild:1};
+  // Flags the keystore engine owns. A PIF-side provider/signature/vending-sdk
+  // spoof intercepts the same keystore calls the engine (OhMyKeymint) answers,
+  // so the two fight and Play Integrity goes red. engine.sh ignores any
+  // spoof.conf override for them; here the toggles render locked and OFF.
+  const LOCKED_FLAGS=["spoofProvider","spoofSignature","spoofVendingSdk"];
   let spoofKind="";  // "fork" | "inject" — set from lite_pif_sync --detect on the Lite line
   const spoofSrc=()=> spoofMode==="pif"
     ? `"${PIF_DIR}/custom.pif.prop" "${PIF_DIR}/pif.prop"`
@@ -969,16 +976,19 @@ async function init(){
     });
     // On the Lite line the flavour fixes the value style and the full option list.
     if(spoofMode==="pif") spoofStyle = spoofKind==="inject" ? "bool" : "num";
-    const set = (spoofMode==="pif" && FLAGSET[spoofKind]) ? FLAGSET[spoofKind] : Object.keys(cur);
+    const base = (spoofMode==="pif" && FLAGSET[spoofKind]) ? FLAGSET[spoofKind] : Object.keys(cur);
+    // locked flags always appear (locked OFF) even before they land in the prop
+    const set = [...base, ...LOCKED_FLAGS.filter(k=>!base.includes(k))];
     // full set, current value where present, otherwise the STRONG default
     return set.map(k=>({ k, on: (k in cur) ? cur[k] : !!FLAG_ON[k] }));
   }
   function renderSpoofVars(vars){
     if(!vars.length){ spoofVarsEl.innerHTML=`<div class="fm-empty">—</div>`; return; }
-    spoofVarsEl.innerHTML=vars.map(v=>
-      `<div class="row"><div class="row-lbl"><div class="row-t spoofvar-t">${v.k}</div></div>`
-      +`<label class="sw"><input type="checkbox" data-k="${v.k}"${v.on?" checked":""}><span class="sl"></span></label></div>`
-    ).join("");
+    spoofVarsEl.innerHTML=vars.map(v=>{
+      const lk=LOCKED_FLAGS.includes(v.k);
+      return `<div class="row${lk?" locked":""}"><div class="row-lbl"><div class="row-t spoofvar-t">${v.k}${lk?'<span class="lock-tag">locked</span>':""}</div></div>`
+      +`<label class="sw"><input type="checkbox" data-k="${v.k}"${(!lk&&v.on)?" checked":""}${lk?" disabled":""}><span class="sl"></span></label></div>`;
+    }).join("");
   }
   spoofVarsEl.addEventListener("change",async e=>{
     const inp=e.target.closest("input[data-k]"); if(!inp) return;

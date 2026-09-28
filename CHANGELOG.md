@@ -1,7 +1,28 @@
 # Changelog
 
 本仓库为第三方二改版本，版本号沿用上游 AlwaysStrong 的 `v1.0.4` 并加 `-omk` 后缀。
-`versionCode` 为 `10400`。
+
+## v1.0.4-omk-r2 — 2026-09-28
+
+修复一加等机型上 Play Integrity 三项全红的问题。
+
+### 修复
+
+- **PIF 与 OMK 争抢 keystore 导致三项全红**：`spoofProvider` / `spoofSignature` /
+  `spoofVendingSdk` 三个标志会让 PlayIntegrityFork 的 zygisk 去拦截 OhMyKeymint
+  正在应答的同一批 keystore 调用，两边互相打架，三项判定全部变红。
+  从旧的非 OMK 安装带过来的 `spoof.conf` 是最常见的触发来源。
+  - `engine.sh`：新增 `engine_locked_keys()`，`engine_spoof_val()` 对这三个键
+    一律取默认值（均为 0），忽略 `spoof.conf` 里的任何覆盖；其余标志仍可由
+    WebUI 覆盖。更新后首次开机 `action.sh` 会自动把三键强制写回 0。
+  - `webroot/index.html`：Advanced 页把这三个开关渲染为「locked」并置灰禁用，
+    防止再次写入冲突值。
+
+### 变更
+
+- `collect_logs.sh`：新增 `spoof.conf` 内容与「实际生效的 spoof 标志」诊断，
+  并对被锁定但仍留在 `spoof.conf` 里的键给出提示，避免误判。
+- `module.prop`：`version=v1.0.4-omk-r2`、`versionCode=10401`。
 
 ## v1.0.4-omk — 2026-09-28
 
