@@ -92,6 +92,10 @@ echo "injected into keystore2: $(pidof keystore2 2>/dev/null | head -1 | while r
 echo "rpc.sock: $([ -S "$OMK_RUN/rpc.sock" ] && echo present || echo MISSING)"
 echo "injector.payload: $(ls -l "$OMK_STATE/injector.payload" 2>/dev/null | awk '{print $5" bytes "$6" "$7" "$8}')"
 echo "restart flags: $(ls "$OMK_STATE"/restart.* 2>/dev/null | tr '\n' ' ')"
+# Which KeyMint instance OMK seals its boot-level key with. Empty means OMK
+# inferred it by probing TEE/StrongBox, which is the unstable path that can make
+# the store undecryptable between restarts; post-fs-data.sh pins it to the TEE.
+echo "level-zero KM strategy: $(getprop ro.keystore.boot_level_key.strategy 2>/dev/null)"
 # keymint's private store — the SQLite DB holding every key blob plus the
 # secure-deletion state file. It is sealed with the [crypto] seeds in config.toml,
 # so a store left behind by a different seed is exactly what makes keymint die at
@@ -112,6 +116,9 @@ if [ -f "$OMK_RUN/logs/keymint.log.store-reset" ]; then
     _why=$(grep -E 'fatal startup error|failed to initialize boot-level key cache|failed to decrypt keyblob' \
            "$OMK_RUN/logs/keymint.log.store-reset" 2>/dev/null | tail -n 5)
     echo "${_why:-none}"
+    if [ -d "$OMK_STATE/store-dropped" ]; then
+        echo "dropped store kept at $OMK_STATE/store-dropped ($(du -sk "$OMK_STATE/store-dropped" 2>/dev/null | awk '{print $1"K"}'))"
+    fi
 fi
 # keymint's DT_NEEDED carries no libc++, so libc++_shared.so reaches it as a
 # dependency of liblog.so and LD_LIBRARY_PATH decides which copy wins. Listing

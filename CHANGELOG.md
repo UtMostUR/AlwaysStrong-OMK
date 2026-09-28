@@ -2,6 +2,48 @@
 
 本仓库为第三方二改版本，版本号沿用上游 AlwaysStrong 的 `v1.0.4` 并加 `-omk` 后缀。
 
+## v1.0.4-omk-r6 — 2026-09-29
+
+修复「OhMyKeymint 的密钥库每次开机被重建，导致 Play Integrity 三项全红」的根因 ——
+与补丁日期无关，r2fix 上同样复现。
+
+### 修复
+
+- **OMK 私密存储被反复重建**：日志里每次开机都有
+  `store was dropped and rebuilt this boot`，触发行是
+  `fatal startup error: failed to initialize boot-level key cache … Error::Km(ErrorCode(-33))`
+  （`-33` = `KM_ERROR_INVALID_KEY_BLOB`）。OMK 用它选中的那个 KeyMint 实例来封装
+  boot-level key，而「选哪个实例」在每次 keymint 启动时都要靠探测 TEE / StrongBox
+  版本来推断（`boot_key.rs`：先看 TEE，TEE < 4.1 时再去问 StrongBox 在不在）。这台设备
+  的 TEE 报的 KeyMint < 4.1、同时又存在 StrongBox 实例，于是选择取决于「此刻 StrongBox
+  注册了没有」；而本模块是在 service 阶段（`boot_completed` 之前）就拉起 keymint 的，
+  这个答案会在多次启动之间翻转。一旦翻转，boot-level key 的密文是另一个实例封的，
+  解不开 —— 上面那条 fatal 就是这么来的，omk-daemon 的自愈随之把整个存储删掉重建，
+  **包括 GMS 的证明密钥在内所有应用密钥一起丢失**，Play Integrity 三项因此全红。
+  - `post-fs-data.sh`：在 keymint 启动前把
+    `ro.keystore.boot_level_key.strategy` 钉成 `TRUSTED_ENVIRONMENT:MAX_USES_PER_BOOT`
+    （仅在 ROM 未设置时写）。上游在 `boot_key.rs` 里明确要求该值一经确定就不得变化，
+    钉住后选择不再翻转，存储不会再被误删。选 TEE 是因为它一定存在（StrongBox 早期
+    可能尚未注册），选 `MAX_USES_PER_BOOT` 是因为它不要求 KeyMint 4.1。
+- **误删的存储现在可恢复**：同一段 fatal 也可能来自真实的 seed 变化，但若起因是上面
+  的实例翻转，那些密文其实是完好的（只是被另一个实例封着）。`omk-daemon` 删除前会把
+  存储复制一份到 `/data/adb/omk/store-dropped`（单槽，覆盖式，不会无限增长）。
+
+### 变更
+
+- `collect_logs.sh`：OMK runtime 段新增 `level-zero KM strategy:` 一行，打印钉住的值；
+  存储被重建时额外打印 `dropped store kept at …`。
+- `module.prop`：`version=v1.0.4-omk-r6`、`versionCode=10406`。
+
+### 说明
+
+钉住之后最多还会再重建一次存储（当前这份密文是旧实例封的），之后稳定；重建后 GMS 的
+证明密钥会重新生成，若三项仍红可稍等片刻，仍不行再清一次 Google Play 服务的数据。
+
+怎么确认生效：重装 r6 后重启，跑一次 Action → 日志（或 `action.sh logs`），OMK runtime
+段里 `level-zero KM strategy:` 应显示 `TRUSTED_ENVIRONMENT:MAX_USES_PER_BOOT`；此后
+`store was dropped and rebuilt this boot` 不应再出现，说明存储不再被误删。
+
 ## v1.0.4-omk-r5 — 2026-09-29
 
 修正 r4 实验性开关的默认状态与说明，并修掉开关开启时 PIF 补丁日期写不进去的缺陷。

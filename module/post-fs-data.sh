@@ -14,6 +14,28 @@ MODPATH="${0%/*}"
 # over from there at the service stage.
 [ -f "$MODPATH/omk-early.sh" ] && sh "$MODPATH/omk-early.sh" 2>/dev/null
 
+# --- Pin the KeyMint instance OMK seals its boot-level key with -----------
+# OMK protects its whole store with a boot-level key, and which KeyMint instance
+# seals that key is inferred at every keymint start unless
+# ro.keystore.boot_level_key.strategy says otherwise (OMK's boot_key.rs probes
+# TEE first, then StrongBox). The inference is NOT stable on a device whose TEE
+# reports KeyMint < 4.1 while a StrongBox instance is also present: that path
+# asks StrongBox whether it is up yet, and we start keymint at the service
+# stage, before boot_completed. When the answer flips, the boot-level key blob
+# was sealed by the other instance and can no longer be decrypted, so keymint
+# dies with
+#   fatal startup error: failed to initialize boot-level key cache
+# and omk-daemon's recovery drops the entire store — every app key goes with it,
+# GMS's attestation keys included, which is what turns Play Integrity red.
+#
+# Pin the TEE: it is always present (StrongBox may not have registered yet) and
+# MAX_USES_PER_BOOT is understood by every KeyMint version, where EARLY_BOOT_ONLY
+# needs 4.1+. Only set it when the ROM left it unset — a value fixed at build
+# time is the vendor's decision and must not be overridden.
+if [ -z "$(getprop ro.keystore.boot_level_key.strategy 2>/dev/null)" ]; then
+    resetprop ro.keystore.boot_level_key.strategy TRUSTED_ENVIRONMENT:MAX_USES_PER_BOOT 2>/dev/null || true
+fi
+
 # --- DenyList: intentionally NOT managed ---------------------------------
 # We must never force "Enforce DenyList" on. With Zygisk Next / ReZygisk /
 # NeoZygisk (the recommended setup) plus a hider like Shamiko, enforcement is

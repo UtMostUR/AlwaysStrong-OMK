@@ -84,7 +84,9 @@ consume_restart_request() {
 # The blobs are cryptographically dead by the time we get here, so dropping the
 # store is the only fix and it costs nothing recoverable. config.toml is left
 # alone: its seeds and [trust] section stay, and keymint writes the rebuilt store
-# under those same seeds.
+# under those same seeds. (A copy is kept in /data/adb/omk/store-dropped anyway —
+# see reset_keymint_store — because a level-zero KeyMint flip produces this exact
+# error with the blobs still intact.)
 #
 # Gated on two independent signals — repeated fast non-zero exits AND a key
 # material failure in keymint.log — because a missing or broken keybox also ends
@@ -113,6 +115,17 @@ reset_keymint_store() {
   _mode=$(stat -c %a "$KEYMINT_STORE" 2>/dev/null)
   _uid=$(stat -c %u "$KEYMINT_STORE" 2>/dev/null)
   _gid=$(stat -c %g "$KEYMINT_STORE" 2>/dev/null)
+
+  # Keep one copy of the dropped store. A seed change really does kill the blobs,
+  # but the same startup error also comes from a level-zero KeyMint flip (see the
+  # pin in post-fs-data.sh), and in that case the blobs are intact — sealed by the
+  # other instance — so the copy is the only way to get those keys back if the
+  # selection is corrected later. Single slot: the previous drop is replaced, so
+  # this cannot grow.
+  if [ -d "$KEYMINT_STORE" ]; then
+    rm -rf "$STATE_DIR/store-dropped" 2>/dev/null
+    cp -a "$KEYMINT_STORE" "$STATE_DIR/store-dropped" 2>/dev/null
+  fi
 
   rm -rf "$KEYMINT_STORE" 2>/dev/null
   mkdir -p "$KEYMINT_STORE" 2>/dev/null
