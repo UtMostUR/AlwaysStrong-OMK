@@ -2,6 +2,53 @@
 
 本仓库为第三方二改版本，版本号沿用上游 AlwaysStrong 的 `v1.0.4` 并加 `-omk` 后缀。
 
+## v1.0.4-omk-r7 — 2026-09-29
+
+修掉「卸载重装本模块会永久毁掉 OMK 密钥库」这个真正的坑，并给 `config.toml` 的
+`[crypto]` 种子加上抢救与留痕 —— 前者才是「Play Integrity 三项全红且怎么刷都不恢复」
+的直接原因。
+
+### 修复
+
+- **卸载时不再删除 OMK 密钥库**：`uninstall.sh` 原来会 `rm -rf /data/adb/omk
+  /data/misc/keystore/omk`。后者的 `data/` 就是 OMK 的密钥库 —— OMK 造过的每一把密钥
+  都在里面，**包括 GMS 用来做 Play Integrity 证明的那把**，而它由同目录 `config.toml`
+  的 `[crypto]` 种子封装。卸载模块并不会把这些密钥搬回系统后端，所以删库 = 密钥永久
+  丢失，只能等 GMS 重新申领（实践中就是清 Google Play 服务的数据）。
+  本模块的常规升级方式恰恰是「卸载 → 重装」，于是每次刷版本都会把库删掉一次，
+  表现为「刷到某个版本就三项全红、退回旧版本也还是红」，很容易被误判成那个版本引入的
+  回归。现在两个根目录一律保留，只清我们自己的临时状态（pidfile / restart 标志）。
+  需要干净重来的用户可以手动删 `/data/misc/keystore/omk` 与 `/data/adb/omk`。
+- **`config.toml` 丢失后自动抢救**：上游文档明确写着，keymint 启动时若该文件不存在，
+  它会重新生成一份**带全新种子**的，而新种子**无法解开**旧种子封的库 —— 整库作废，
+  keymint 报 `failed to decrypt keyblob … VerificationFailed`、
+  `failed to initialize boot-level key cache` 后退出，omk-daemon 随即将库丢弃重建。
+  `omk-sync.sh` 现在把最后一份**四个 `[crypto]` 字段齐全**的 `config.toml` 备份到
+  `/data/adb/omk/config.toml.keep`（缺字段的半成品不备份，避免污染恢复），
+  `omk-early.sh` 在 keymint 启动前发现运行时文件缺失就从备份还原。种子因此能扛住
+  除「显式重置」以外的一切。
+
+### 变更
+
+- `omk-early.sh`：每次开机把 `[crypto]` 种子的哈希指纹（只记哈希，永不落明文）追加到
+  `/data/adb/omk/crypto-history.log`（保留最近 40 条），这样一份日志就能看出种子是否
+  在跨开机变化 —— 会变，就是故障本身。
+- `collect_logs.sh`：OMK 段新增
+  - `config.toml.keep` 的存在与指纹，以及与运行中文件不一致时的 WARN；
+  - 密钥库与 `config.toml` 「一个在一个不在」时的 WARN（这是下一次启动必然丢库的状态）；
+  - 最近两次开机的 `[crypto]` 指纹不同时的 WARN，直接点名「库会被丢」。
+- `module.prop`：`version=v1.0.4-omk-r7`、`versionCode=10407`。
+
+### 说明
+
+r6 的 pin 已经让 KeyMint 实例选择稳定下来（`level-zero KM strategy` 固定为
+`TRUSTED_ENVIRONMENT:MAX_USES_PER_BOOT`），但**钉住的当下会换来最后一次丢库**：旧库
+是被另一个实例/策略封的，解不开，只能重建。r7 不改变这个 pin，所以升级 r7 不会再触发
+新的丢库。要回到三项全绿，重装 r7 后重启，然后清一次 Google Play 服务的数据让 GMS
+重新申领证明密钥；再跑一次 Action → 日志，确认
+`store was dropped and rebuilt this boot` 不再出现、`[crypto] fingerprint` 连续两次开机
+一致。
+
 ## v1.0.4-omk-r6 — 2026-09-29
 
 修复「OhMyKeymint 的密钥库每次开机被重建，导致 Play Integrity 三项全红」的根因 ——

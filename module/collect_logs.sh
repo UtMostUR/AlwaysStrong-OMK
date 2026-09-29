@@ -103,6 +103,15 @@ echo "level-zero KM strategy: $(getprop ro.keystore.boot_level_key.strategy 2>/d
 # parks the crash trail in keymint.log.store-reset.
 echo "--- private store"
 ls -l "$OMK_RUN/data" 2>/dev/null || echo "  no store yet (keymint has not started)"
+# The store and config.toml are a matched pair — the store is sealed with the
+# [crypto] seeds in config.toml. Losing one half while the other survives is the
+# one state that guarantees the next keymint start drops the store, so name it
+# instead of leaving the reader to spot it in the listing above.
+_store_here=0; [ -d "$OMK_RUN/data" ] && _store_here=1
+_conf_here=0; [ -s "$OMK_RUN/config.toml" ] && _conf_here=1
+if [ "$_store_here" != "$_conf_here" ]; then
+    echo "WARN: key store and config.toml disagree (store=$([ "$_store_here" = 1 ] && echo present || echo absent), config.toml=$([ "$_conf_here" = 1 ] && echo present || echo absent)) — the next keymint start will drop the store"
+fi
 # keymint writes a session UUID and a count, on two lines.
 if [ -f "$OMK_RUN/crash_count" ]; then
     echo "crash_count (session, count): $(tr '\n' ' ' < "$OMK_RUN/crash_count" 2>/dev/null)"
@@ -145,6 +154,56 @@ if [ -s "$OMK_RUN/config.toml" ]; then
     awk '/^[[:space:]]*\[/ { intrust = ($0 ~ /\[trust\]/) } intrust' "$OMK_RUN/config.toml" 2>/dev/null
 else
     echo "no config.toml yet (keymint has not started)"
+fi
+# The [crypto] seeds are what make the store decryptable, and OMK mints fresh
+# ones when config.toml is missing at keymint start. Print which fields exist and
+# a hash over their values — never the values. omk-early.sh appends one line per
+# boot, so a single log shows whether they move between boots; a moving
+# fingerprint is what makes the next boot drop the store.
+_cfp=""
+if [ -s "$OMK_RUN/config.toml" ]; then
+    _cf=$(awk -F= '
+        /^[[:space:]]*\[/ { inc = ($0 ~ /\[crypto\]/); next }
+        inc && /^[[:space:]]*[A-Za-z_]+[[:space:]]*=/ {
+            k = $1; gsub(/[[:space:]]/, "", k)
+            v = substr($0, index($0, "=") + 1)
+            gsub(/[[:space:]"]/, "", v)
+            print k "=" v
+        }
+    ' "$OMK_RUN/config.toml" 2>/dev/null | sort)
+    _cfp=$(printf '%s\n' "$_cf" | sha256sum 2>/dev/null | cut -c1-16)
+    echo "--- config.toml [crypto] (values hashed, never printed)"
+    echo "crypto fields: $(printf '%s\n' "$_cf" | sed 's/=.*//' | tr '\n' ' ')"
+    echo "crypto fingerprint: ${_cfp:-?}"
+fi
+# omk-sync.sh parks the last complete file here and omk-early.sh restores it when
+# the live one is gone. A fingerprint that does not match the live file means
+# config.toml was regenerated, and the store sealed by the old seeds is orphaned.
+_keepfp=""
+if [ -s "$OMK_STATE/config.toml.keep" ]; then
+    _keepfp=$(awk -F= '
+        /^[[:space:]]*\[/ { inc = ($0 ~ /\[crypto\]/); next }
+        inc && /^[[:space:]]*[A-Za-z_]+[[:space:]]*=/ {
+            k = $1; gsub(/[[:space:]]/, "", k)
+            v = substr($0, index($0, "=") + 1)
+            gsub(/[[:space:]"]/, "", v)
+            print k "=" v
+        }
+    ' "$OMK_STATE/config.toml.keep" 2>/dev/null | sort | sha256sum 2>/dev/null | cut -c1-16)
+fi
+echo "config.toml.keep: $([ -n "$_keepfp" ] && echo "present (fingerprint ${_keepfp})" || echo absent)"
+[ -n "$_cfp" ] && [ -n "$_keepfp" ] && [ "$_cfp" != "$_keepfp" ] && \
+    echo "WARN: live [crypto] seeds differ from the kept backup — config.toml was regenerated, so the store sealed by the old seeds is unreachable"
+if [ -s "$OMK_STATE/crypto-history.log" ]; then
+    echo "--- [crypto] fingerprint per boot (newest last)"
+    tail -n 12 "$OMK_STATE/crypto-history.log"
+    # omk-early.sh appends one line per boot. Two different values in a row IS
+    # the failure: the store written under the earlier seeds cannot be opened
+    # under the later ones, so keymint drops it on that boot.
+    _fp_new=$(tail -n 1 "$OMK_STATE/crypto-history.log" 2>/dev/null | sed -n 's/.*fp=\([^ ]*\).*/\1/p')
+    _fp_old=$(tail -n 2 "$OMK_STATE/crypto-history.log" 2>/dev/null | head -n 1 | sed -n 's/.*fp=\([^ ]*\).*/\1/p')
+    [ -n "$_fp_new" ] && [ -n "$_fp_old" ] && [ "$_fp_new" != "$_fp_old" ] && \
+        echo "WARN: [crypto] seeds changed between the last two boots (${_fp_old} -> ${_fp_new}) — the store written under the earlier seeds is dropped on the later boot"
 fi
 echo "--- injector.toml scoop"
 awk '/^[[:space:]]*scoop[[:space:]]*=/ { ins = 1; next } ins && /^[[:space:]]*\]/ { ins = 0 } ins' "$OMK_RUN/injector.toml" 2>/dev/null

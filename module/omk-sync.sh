@@ -29,6 +29,7 @@ OMK_STATE_DIR=/data/adb/omk
 OMK_KEYBOX="$OMK_RUN_DIR/keybox.xml"
 OMK_INJECTOR="$OMK_RUN_DIR/injector.toml"
 OMK_CONFIG="$OMK_RUN_DIR/config.toml"
+OMK_CONFIG_KEEP="$OMK_STATE_DIR/config.toml.keep"
 
 # Packages OMK must always route: the Google trio has to use the hardware keybox
 # to reach STRONG, keyattestation is the reference checker, and duckdetector is
@@ -226,6 +227,35 @@ if [ -s "$OMK_CONFIG" ]; then
     else
         rm -f "$_tmp" 2>/dev/null
     fi
+fi
+
+# --- 3b. keep a copy of the generated config.toml ------------------------
+# The [crypto] seeds in this file are what make the existing store decryptable,
+# and OMK writes a brand-new file — with brand-new seeds — when it is missing at
+# keymint start. omk-early.sh restores this copy in that case, so the seeds
+# survive anything short of an explicit reset. Only a file that still carries all
+# four generated fields is worth keeping: a half-written one would poison the
+# restore. Written next to our state, not into the keystore-owned runtime dir.
+if [ -s "$OMK_CONFIG" ]; then
+    _have=$(awk -F= '
+        /^[[:space:]]*\[/ { inc = ($0 ~ /\[crypto\]/); next }
+        inc && /^[[:space:]]*[A-Za-z_]+[[:space:]]*=/ {
+            k = $1; gsub(/[[:space:]]/, "", k); print k
+        }
+    ' "$OMK_CONFIG" 2>/dev/null | sort | tr '\n' ' ')
+    case "$_have" in
+        *kak_seed*root_kek_seed*shared_secret_nonce*shared_secret_seed*)
+            _s=$(sha_of "$OMK_CONFIG")
+            _d=$(sha_of "$OMK_CONFIG_KEEP")
+            if [ -n "$_s" ] && [ "$_s" != "$_d" ]; then
+                _kctmp="$OMK_CONFIG_KEEP.as.tmp"
+                if cp -f "$OMK_CONFIG" "$_kctmp" 2>/dev/null; then
+                    chmod 0600 "$_kctmp" 2>/dev/null
+                    mv -f "$_kctmp" "$OMK_CONFIG_KEEP"
+                fi
+            fi
+            ;;
+    esac
 fi
 
 # --- 4. make OMK re-read what we wrote -----------------------------------

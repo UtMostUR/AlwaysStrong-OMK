@@ -64,7 +64,84 @@ if [ ! -f "$OMK_RUN_DIR/injector.toml" ] && [ -s "$MODDIR/injector.toml" ]; then
     cp -f "$MODDIR/injector.toml" "$OMK_RUN_DIR/injector.toml" 2>/dev/null
 fi
 
-for f in "$OMK_RUN_DIR/keybox.xml" "$OMK_RUN_DIR/injector.toml"; do
+# --- config.toml rescue ---------------------------------------------------
+# config.toml holds the generated [crypto] seeds, and OMK derives the key that
+# protects every blob it has ever minted from root_kek_seed. Its own docs are
+# explicit that a missing file at keymint start makes it mint a new one with new
+# seeds, and that this does not restore keys protected by the previous seeds —
+# the whole store becomes undecryptable and keymint dies with
+#   failed to decrypt keyblob: ... VerificationFailed ...
+#   fatal startup error: failed to initialize boot-level key cache
+# after which omk-daemon drops the store, taking GMS's attestation keys with it.
+# omk-sync.sh parks a copy of the last complete file next to our state, so put it
+# back before keymint starts instead of letting OMK invent new seeds. Only a file
+# still carrying all four generated fields is accepted — a half-written one would
+# poison the restore.
+OMK_CONFIG="$OMK_RUN_DIR/config.toml"
+OMK_CONFIG_KEEP="$OMK_STATE_DIR/config.toml.keep"
+
+crypto_fields() {
+    awk -F= '
+        /^[[:space:]]*\[/ { inc = ($0 ~ /\[crypto\]/); next }
+        inc && /^[[:space:]]*[A-Za-z_]+[[:space:]]*=/ {
+            k = $1; gsub(/[[:space:]]/, "", k); print k
+        }
+    ' "$1" 2>/dev/null | sort | tr '\n' ' '
+}
+
+if [ ! -s "$OMK_CONFIG" ] && [ -s "$OMK_CONFIG_KEEP" ]; then
+    case "$(crypto_fields "$OMK_CONFIG_KEEP")" in
+        *kak_seed*root_kek_seed*shared_secret_nonce*shared_secret_seed*)
+            cp -f "$OMK_CONFIG_KEEP" "$OMK_CONFIG" 2>/dev/null
+            ;;
+    esac
+fi
+
+# --- seed fingerprint history --------------------------------------------
+# One line per boot, so a single diagnostic log shows whether the seeds move.
+# A stable fingerprint means the next boot can still decrypt this boot's store; a
+# moving one *is* the failure, and this line is the only place that is visible
+# without ever printing a seed. Values are hashed, never written.
+crypto_dump() {
+    awk -F= '
+        /^[[:space:]]*\[/ { inc = ($0 ~ /\[crypto\]/); next }
+        inc && /^[[:space:]]*[A-Za-z_]+[[:space:]]*=/ {
+            k = $1; gsub(/[[:space:]]/, "", k)
+            v = substr($0, index($0, "=") + 1)
+            gsub(/[[:space:]"]/, "", v)
+            print k "=" v
+        }
+    ' "$1" 2>/dev/null | sort
+}
+
+crypto_hash() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum 2>/dev/null | cut -c1-16
+    elif command -v sha >/dev/null 2>&1; then
+        sha 2>/dev/null | cut -c1-16
+    else
+        cksum 2>/dev/null | awk '{print $1}'
+    fi
+}
+
+if [ -s "$OMK_CONFIG" ]; then
+    _fp=$(crypto_dump "$OMK_CONFIG" | crypto_hash)
+    printf '%s fp=%s size=%s fields=%s\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%S 2>/dev/null)" "${_fp:-?}" \
+        "$(wc -c < "$OMK_CONFIG" 2>/dev/null | tr -d ' ')" \
+        "$(crypto_fields "$OMK_CONFIG")" \
+        >> "$OMK_STATE_DIR/crypto-history.log" 2>/dev/null
+    _n=$(wc -l < "$OMK_STATE_DIR/crypto-history.log" 2>/dev/null | tr -d ' ')
+    case "$_n" in
+        ''|*[!0-9]*) ;;
+        *) [ "$_n" -gt 40 ] && tail -n 40 "$OMK_STATE_DIR/crypto-history.log" \
+               > "$OMK_STATE_DIR/crypto-history.log.tmp" 2>/dev/null && \
+               mv -f "$OMK_STATE_DIR/crypto-history.log.tmp" \
+                     "$OMK_STATE_DIR/crypto-history.log" 2>/dev/null ;;
+    esac
+fi
+
+for f in "$OMK_RUN_DIR/keybox.xml" "$OMK_RUN_DIR/injector.toml" "$OMK_RUN_DIR/config.toml"; do
     [ -f "$f" ] || continue
     chmod 0600 "$f" 2>/dev/null
     chown 1017:1017 "$f" 2>/dev/null
